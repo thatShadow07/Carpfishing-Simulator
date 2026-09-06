@@ -45,14 +45,13 @@ Carpfishing-Simulator/
 │   ├── Settings/
 │   └── UI/
 ├── Docs/
-│   ├── GAME_DESIGN.md
-│   ├── ARCHITECTURE.md
 │   └── FISHING_SYSTEM.md
 ├── ProjectSettings/
 ├── Packages/
 ├── UserSettings/
 ├── .gitignore
 ├── AGENTS.md
+├── ARCHITECTURE.md
 ├── CLAUDE.md
 ├── GAME_DESIGN.md
 ├── ROADMAP.md
