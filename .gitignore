@@ -1,0 +1,56 @@
+# Unity generated folders
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+
+# MemoryCaptures
+[Mm]emoryCaptures/
+
+# Asset import worker cache
+/[Aa]ssets/[Aa]ddressable[Aa]ssets[Dd]ata/*
+
+# IDEs and editors
+.vs/
+.idea/
+.vscode/
+*.csproj
+*.sln
+*.slnx
+*.user
+*.userprefs
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Unity generated files
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+
+# Crash reports
+sysinfo.txt
+
+# Builds and archives
+*.apk
+*.aab
+*.unitypackage
+*.app
+*.exe
+*.zip
+
+# Secrets / local environment
+.env
+.env.*
+*.key
+*.pem
+
+# Keep Unity packages/settings that belong in source control
+!Packages/manifest.json
+!Packages/packages-lock.json
