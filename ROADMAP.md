@@ -2,17 +2,17 @@
 
 ## September 2026 — Foundation
 
-- [ ] Create Unity 6 project
-- [ ] Establish folder structure
-- [ ] First-person controller
-- [ ] Basic input system
-- [ ] Basic interaction system
+- [x] Create Unity 6 project
+- [x] Establish folder structure
+- [x] First-person controller
+- [x] Basic input system
+- [x] Basic interaction system
 - [ ] Initial lake scene
-- [ ] Git workflow established
+- [x] Git workflow established
 
 ## October 2026 — Fishing Core
 
-- [ ] Rod system
+- [ ] Rod system (pick up + equip prototype done; casting/holding logic still pending)
 - [ ] Reel system
 - [ ] Line representation
 - [ ] Casting prototype
@@ -82,6 +82,7 @@
 
 ## Post vertical slice
 
+- Interaction outline/highlight polish (visual feedback on interactable objects)
 - More fish species
 - More venues
 - Advanced rigs
