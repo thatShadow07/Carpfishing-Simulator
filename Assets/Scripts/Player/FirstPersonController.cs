@@ -3,7 +3,7 @@ using UnityEngine.InputSystem;
 
 public class FirstPersonController : MonoBehaviour
 {
-    public float mouseSensitivity = 200f;
+    public float mouseSensitivity = 0.1f;
     public Transform playerBody;
 
     private float xRotation;
@@ -18,8 +18,8 @@ public class FirstPersonController : MonoBehaviour
     {
         Vector2 look = Mouse.current.delta.ReadValue();
 
-        float mouseX = look.x * mouseSensitivity * Time.deltaTime * 0.01f;
-        float mouseY = look.y * mouseSensitivity * Time.deltaTime * 0.01f;
+        float mouseX = look.x * mouseSensitivity;
+        float mouseY = look.y * mouseSensitivity;
 
         xRotation -= mouseY;
         xRotation = Mathf.Clamp(xRotation, -90f, 90f);
