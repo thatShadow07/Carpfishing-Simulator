@@ -14,6 +14,9 @@ public class PlayerMovement : MonoBehaviour
     private CharacterController characterController;
     private float verticalVelocity;
 
+    private float jumpHeight;
+
+
     private void Awake()
     {
         characterController = GetComponent<CharacterController>();
@@ -22,6 +25,15 @@ public class PlayerMovement : MonoBehaviour
     private void Update()
     {
         HandleMovement();
+
+        Jump();
+
+        isGrounded = Physics.CheckSphere(groundCheck.position, groundDistance, groundMask);
+        if(isGrounded && velocity.y < 0){
+
+            velocity.y = -2f;
+
+        }
     }
 
     private void HandleMovement()
@@ -55,5 +67,16 @@ public class PlayerMovement : MonoBehaviour
         velocity.y = verticalVelocity;
 
         characterController.Move(velocity * Time.deltaTime);
+
+
+
+        private void Jump()
+        {
+            if(Input.GetButtonDown("Jump") && isGrounded){
+
+                velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+
+            }            
+        }
     }
 }
