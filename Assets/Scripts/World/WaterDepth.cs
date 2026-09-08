@@ -1,9 +1,10 @@
 using UnityEngine;
 
 /// <summary>
-/// Defines the depth of a water body at its current prototype stage.
-/// For now the lake has a flat surface and a flat bottom.
-/// Later this can be extended to support depth variation by position.
+/// Define a superfície da água e vai buscar a altura real do fundo do lago
+/// abaixo de qualquer ponto, para que zonas diferentes tenham profundidades
+/// diferentes. O Plane da água continua a ser só a superfície - o fundo é
+/// uma geometria separada (na layer "LakeBed") contra a qual fazemos raycast.
 /// </summary>
 public class WaterDepth : MonoBehaviour
 {
@@ -11,23 +12,35 @@ public class WaterDepth : MonoBehaviour
     [SerializeField] private float surfaceHeight = 0f;
 
     [Header("Lake Bottom")]
-    [SerializeField] private float bottomHeight = -5f;
+    [SerializeField] private LayerMask lakeBedLayer;
+    [SerializeField] private float fallbackBottomHeight = -5f; // usado se o raycast não encontrar fundo nenhum
 
     public float SurfaceHeight => surfaceHeight;
-    public float BottomHeight => bottomHeight;
 
     /// <summary>
-    /// Returns the water depth at a world position.
-    /// Currently every point has the same depth because the prototype lake has a flat bottom.
+    /// Altura (Y) do fundo do lago diretamente abaixo de worldPosition.
     /// </summary>
-    public float GetDepthAt(Vector3 worldPosition)
+    public float GetBottomHeightAt(Vector3 worldPosition)
     {
-        return Mathf.Max(0f, surfaceHeight - bottomHeight);
+        Vector3 origin = new Vector3(worldPosition.x, surfaceHeight, worldPosition.z);
+
+        if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 100f, lakeBedLayer))
+        {
+            return hit.point.y;
+        }
+
+        return fallbackBottomHeight;
     }
 
     /// <summary>
-    /// Returns how far below the water surface a point currently is.
+    /// Profundidade da água (superfície até ao fundo) num ponto.
     /// </summary>
+    public float GetDepthAt(Vector3 worldPosition)
+    {
+        float bottomHeight = GetBottomHeightAt(worldPosition);
+        return Mathf.Max(0f, surfaceHeight - bottomHeight);
+    }
+
     public float GetSubmersionDepth(Vector3 worldPosition)
     {
         return Mathf.Max(0f, surfaceHeight - worldPosition.y);
