@@ -10,6 +10,7 @@ public class CastingSystem : MonoBehaviour
     [SerializeField] private Rigidbody sinkerPrefab;
     [SerializeField] private Transform castOrigin;
     [SerializeField] private FishingLine fishingLine;
+    [SerializeField] private FishingReel fishingReel;
 
     [Header("Força")]
     [SerializeField] private float minForce = 5f;
@@ -34,7 +35,6 @@ public class CastingSystem : MonoBehaviour
         switch (state)
         {
             case CastState.Idle:
-                // Só começa a carregar se o botão direito estiver premido
                 if (isAiming && Mouse.current.leftButton.wasPressedThisFrame)
                 {
                     state = CastState.Aiming;
@@ -43,7 +43,6 @@ public class CastingSystem : MonoBehaviour
                 break;
 
             case CastState.Aiming:
-                // Se soltares o botão direito a meio, cancela sem lançar
                 if (!isAiming)
                 {
                     state = CastState.Idle;
@@ -80,11 +79,16 @@ public class CastingSystem : MonoBehaviour
             fishingLine.SetTarget(sinker.transform);
         }
 
+        if (fishingReel != null)
+        {
+            fishingReel.SetSinker(sinker);
+        }
+
         Debug.Log($"Lançamento a {chargePercent:P0} de força ({force:F1})");
         state = CastState.InFlight;
     }
 
-    // O futuro ReelSystem chama isto quando o rig for recolhido de volta
+    // Chamado pelo FishingReel quando o rig é totalmente recolhido
     public void ResetCast()
     {
         state = CastState.Idle;

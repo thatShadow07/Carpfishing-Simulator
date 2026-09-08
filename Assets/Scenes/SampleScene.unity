@@ -450,6 +450,7 @@ GameObject:
   - component: {fileID: 687003310}
   - component: {fileID: 687003312}
   - component: {fileID: 687003311}
+  - component: {fileID: 687003313}
   m_Layer: 0
   m_Name: Cylinder
   m_TagString: Untagged
@@ -546,6 +547,7 @@ MonoBehaviour:
   sinkerPrefab: {fileID: 6643605043692736312, guid: f6e410de9200390408040683dd21f623, type: 3}
   castOrigin: {fileID: 2019995295}
   fishingLine: {fileID: 687003312}
+  fishingReel: {fileID: 687003313}
   minForce: 5
   maxForce: 25
   chargeTime: 1.5
@@ -671,6 +673,22 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FishingLine
   lineStart: {fileID: 2019995295}
+--- !u!114 &687003313
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 687003305}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 07aa563e2956c474c9ccc275172bf6f6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FishingReel
+  castingSystem: {fileID: 687003310}
+  castOrigin: {fileID: 2019995295}
+  reelSpeed: 4
+  catchDistance: 0.3
 --- !u!1 &1003823628
 GameObject:
   m_ObjectHideFlags: 0
