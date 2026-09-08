@@ -24,7 +24,7 @@ public class Sinker : MonoBehaviour
 
         if (collision.gameObject.CompareTag("Water"))
         {
-            LandInWater();
+            LandInWater(collision.gameObject);
         }
         else
         {
@@ -32,12 +32,22 @@ public class Sinker : MonoBehaviour
         }
     }
 
-    private void LandInWater()
+    private void LandInWater(GameObject waterObject)
     {
-        Debug.Log("Rig entrou na água.");
+        WaterDepth waterDepth = waterObject.GetComponent<WaterDepth>();
+
+        if (waterDepth != null)
+        {
+            float depth = waterDepth.GetDepthAt(transform.position);
+            Debug.Log($"Rig entrou na água. Profundidade neste ponto: {depth:F1} m.");
+        }
+        else
+        {
+            Debug.Log("Rig entrou na água, mas este objeto ainda não tem WaterDepth.");
+        }
 
         // Por agora, "assenta" simplesmente parando a física.
-        // Mais tarde isto será substituído por profundidade real do lago.
+        // O afundamento até ao fundo será implementado no próximo passo.
         rb.linearVelocity = Vector3.zero;
         rb.isKinematic = true;
     }
