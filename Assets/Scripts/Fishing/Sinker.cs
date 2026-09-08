@@ -6,8 +6,12 @@ using UnityEngine;
 public class Sinker : MonoBehaviour
 {
     private bool hasLanded;
+    private bool isSinking;
+    private float waterBottomHeight;
+    private float sinkingSpeed;
 
     [SerializeField] private Rigidbody rb;
+    [SerializeField] private float sinkSpeed = 2f;
 
     private void Awake()
     {
@@ -17,10 +21,25 @@ public class Sinker : MonoBehaviour
         }
     }
 
+    private void Update()
+    {
+        if (!isSinking) return;
+
+        Vector3 position = transform.position;
+        position.y = Mathf.MoveTowards(position.y, waterBottomHeight, sinkingSpeed * Time.deltaTime);
+        transform.position = position;
+
+        if (Mathf.Approximately(position.y, waterBottomHeight))
+        {
+            isSinking = false;
+            hasLanded = true;
+            Debug.Log($"Rig assentou no fundo. Profundidade: {GetSettledDepth():F1} m.");
+        }
+    }
+
     private void OnCollisionEnter(Collision collision)
     {
         if (hasLanded) return;
-        hasLanded = true;
 
         if (collision.gameObject.CompareTag("Water"))
         {
@@ -28,6 +47,7 @@ public class Sinker : MonoBehaviour
         }
         else
         {
+            hasLanded = true;
             LandOnGround(collision);
         }
     }
@@ -36,20 +56,25 @@ public class Sinker : MonoBehaviour
     {
         WaterDepth waterDepth = waterObject.GetComponent<WaterDepth>();
 
-        if (waterDepth != null)
-        {
-            float depth = waterDepth.GetDepthAt(transform.position);
-            Debug.Log($"Rig entrou na água. Profundidade neste ponto: {depth:F1} m.");
-        }
-        else
+        if (waterDepth == null)
         {
             Debug.Log("Rig entrou na água, mas este objeto ainda não tem WaterDepth.");
+            return;
         }
 
-        // Por agora, "assenta" simplesmente parando a física.
-        // O afundamento até ao fundo será implementado no próximo passo.
+        waterBottomHeight = waterDepth.BottomHeight;
+        sinkingSpeed = Mathf.Max(0.01f, sinkSpeed);
+
         rb.linearVelocity = Vector3.zero;
         rb.isKinematic = true;
+        isSinking = true;
+
+        Debug.Log($"Rig entrou na água. A afundar até {waterDepth.GetDepthAt(transform.position):F1} m de profundidade.");
+    }
+
+    private float GetSettledDepth()
+    {
+        return Mathf.Max(0f, -waterBottomHeight);
     }
 
     private void LandOnGround(Collision collision)
