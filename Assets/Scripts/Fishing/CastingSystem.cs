@@ -9,6 +9,7 @@ public class CastingSystem : MonoBehaviour
     [SerializeField] private Camera playerCamera;
     [SerializeField] private Rigidbody sinkerPrefab;
     [SerializeField] private Transform castOrigin;
+    [SerializeField] private FishingLine fishingLine;
 
     [Header("Força")]
     [SerializeField] private float minForce = 5f;
@@ -74,6 +75,11 @@ public class CastingSystem : MonoBehaviour
         Rigidbody sinker = Instantiate(sinkerPrefab, origin, Quaternion.identity);
         sinker.AddForce(direction * force, ForceMode.VelocityChange);
 
+        if (fishingLine != null)
+        {
+            fishingLine.SetTarget(sinker.transform);
+        }
+
         Debug.Log($"Lançamento a {chargePercent:P0} de força ({force:F1})");
         state = CastState.InFlight;
     }
@@ -83,6 +89,11 @@ public class CastingSystem : MonoBehaviour
     {
         state = CastState.Idle;
         chargeTimer = 0f;
+
+        if (fishingLine != null)
+        {
+            fishingLine.Clear();
+        }
     }
 
     public float GetChargePercent() => chargeTime > 0f ? chargeTimer / chargeTime : 0f;
