@@ -7,15 +7,17 @@
 - [x] First-person controller
 - [x] Basic input system
 - [x] Basic interaction system
-- [ ] Initial lake scene
+- [x] Initial lake scene
 - [x] Git workflow established
 
 ## October 2026 — Fishing Core
 
-- [ ] Rod system (pick up + equip prototype done; casting/holding logic still pending)
+- [x] Rod system (pick up + equip prototype)
 - [ ] Reel system
 - [ ] Line representation
-- [ ] Casting prototype
+- [x] Casting prototype
+- [x] Water detection
+- [ ] Water depth system
 - [ ] Rig in water
 - [ ] Bite detection
 - [ ] Alarm
