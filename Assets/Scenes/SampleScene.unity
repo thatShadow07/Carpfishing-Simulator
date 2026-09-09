@@ -336,6 +336,7 @@ GameObject:
   - component: {fileID: 219401223}
   - component: {fileID: 219401222}
   - component: {fileID: 219401221}
+  - component: {fileID: 219401226}
   m_Layer: 0
   m_Name: Carp
   m_TagString: Untagged
@@ -368,7 +369,10 @@ MonoBehaviour:
   biteDistance: 0.5
   investigateDuration: 2
   biteChance: 0.7
-  reactionWindow: 2
+  baitCooldown: 6
+  hookChance: 0.85
+  hookDelay: 0.75
+  alarmReactionWindow: 2
 --- !u!136 &219401222
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -464,6 +468,30 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &219401226
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 219401220}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 47f8d7c5c9515e3409ffbc35dea1e5ad, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FishFightController
+  fishWeight: 8
+  fishStrength: 1
+  maxStamina: 100
+  playerTransform: {fileID: 1003823629}
+  fishingLine: {fileID: 687003312}
+  minimumDistance: 1.5
+  recoverySpeed: 0.8
+  burstDuration: 2.5
+  burstCooldown: 3.5
+  burstSpeed: 4
+  staminaDrainPerSecond: 10
+  staminaRecoveryPerSecond: 4
 --- !u!1 &240365734
 GameObject:
   m_ObjectHideFlags: 0
