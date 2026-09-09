@@ -358,10 +358,17 @@ MonoBehaviour:
   currentState: 0
   moveSpeed: 1.5
   turnSpeed: 3
-  swimRadius: 8
-  minY: -4
-  maxY: -1
   destinationReachedDistance: 0.5
+  lakeCenter: {x: -0.6, y: 0, z: 33.19}
+  swimRadius: 20
+  waterDepth: {fileID: 1264695419}
+  surfaceMargin: 0.5
+  bottomMargin: 0.5
+  detectionRadius: 4
+  biteDistance: 0.5
+  investigateDuration: 2
+  biteChance: 0.7
+  reactionWindow: 2
 --- !u!136 &219401222
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -450,13 +457,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 219401220}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0.6946162, w: 0.71938056}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 1.71, y: 1.01, z: 24.83}
-  m_LocalScale: {x: 0.9, y: 0.72, z: 0.66}
+  m_LocalScale: {x: 2.28, y: 0.48, z: 0.61}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: -87.993}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &240365734
 GameObject:
   m_ObjectHideFlags: 0
@@ -1154,7 +1161,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -0.6, y: 1.1, z: 33.19}
-  m_LocalScale: {x: 4.0152, y: 2.8597467, z: 4}
+  m_LocalScale: {x: 4.0152, y: 1, z: 4}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}

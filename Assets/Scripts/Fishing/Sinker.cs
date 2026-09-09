@@ -2,10 +2,15 @@ using UnityEngine;
 
 // Placeholder do chumbo/rig lançado. Ao tocar na água, para de cair por
 // física normal e desce lentamente até ao fundo real do lago (via WaterDepth).
+// Expõe-se como Sinker.Current para que o FishAI o possa encontrar sem
+// precisar de uma referência direta.
 public class Sinker : MonoBehaviour
 {
+    public static Sinker Current { get; private set; }
+    public bool IsInWater { get; private set; }
+
     [SerializeField] private Rigidbody rb;
-    [SerializeField] private float sinkSpeed = 1.5f; // metros por segundo
+    [SerializeField] private float sinkSpeed = 1.5f;
 
     private bool hasLanded;
     private bool isSinking;
@@ -16,6 +21,19 @@ public class Sinker : MonoBehaviour
         if (rb == null)
         {
             rb = GetComponent<Rigidbody>();
+        }
+    }
+
+    private void OnEnable()
+    {
+        Current = this;
+    }
+
+    private void OnDestroy()
+    {
+        if (Current == this)
+        {
+            Current = null;
         }
     }
 
@@ -38,6 +56,7 @@ public class Sinker : MonoBehaviour
     {
         rb.linearVelocity = Vector3.zero;
         rb.isKinematic = true;
+        IsInWater = true;
 
         WaterDepth waterDepth = waterObject.GetComponent<WaterDepth>();
 
@@ -68,7 +87,7 @@ public class Sinker : MonoBehaviour
         }
         else
         {
-            isSinking = false; // chegou ao fundo
+            isSinking = false;
         }
     }
 
