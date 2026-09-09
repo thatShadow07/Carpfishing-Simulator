@@ -3,9 +3,7 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// Controla a luta da carpa através do rig real.
-/// A carpa faz arrancadas, fica cansada e só perde terreno quando o pescador
-/// recolhe. O rig é puxado pelo carreto e a carpa oferece resistência, em vez
-/// de ser movida instantaneamente com o chumbo.
+/// A carpa faz arrancadas, fica cansada e oferece resistência ao carreto.
 /// </summary>
 public class FishFightController : MonoBehaviour
 {
@@ -29,6 +27,7 @@ public class FishFightController : MonoBehaviour
     [SerializeField] private float staminaDrainPerSecond = 12f;
     [SerializeField] private float staminaRecoveryPerSecond = 2.5f;
     [SerializeField] private float exhaustedRecoveryDelay = 3f;
+    [SerializeField, Range(0f, 1f)] private float resistanceStrength = 0.7f;
 
     private float stamina;
     private float distanceFromPlayer;
@@ -45,15 +44,11 @@ public class FishFightController : MonoBehaviour
     public bool IsFighting => isFighting;
     public bool IsBursting => isBursting;
 
-    private void Awake()
-    {
-        stamina = maxStamina;
-    }
+    private void Awake() => stamina = maxStamina;
 
     private void Update()
     {
         if (!isFighting || playerTransform == null || hookedSinker == null) return;
-
         UpdateFight(Time.deltaTime);
     }
 
@@ -82,12 +77,9 @@ public class FishFightController : MonoBehaviour
         hookedSinker.AttachFish(transform);
 
         if (fishingLine != null)
-        {
             fishingLine.SetTarget(hookedSinker.transform);
-        }
 
         StartBurst();
-
         Debug.Log($"⚔️ FIGHTING! A carpa de {fishWeight:F1} kg começou a lutar a {distanceFromPlayer:F1} m do jogador.");
     }
 
@@ -97,7 +89,6 @@ public class FishFightController : MonoBehaviour
         {
             burstTimer -= deltaTime;
             stamina = Mathf.Max(0f, stamina - staminaDrainPerSecond * fishStrength * deltaTime);
-
             MoveFishAndRig(burstDirection, burstSpeed * fishStrength * deltaTime);
 
             if (burstTimer <= 0f || stamina <= 0f)
@@ -110,10 +101,7 @@ public class FishFightController : MonoBehaviour
                     exhaustedTimer = exhaustedRecoveryDelay;
                     Debug.Log("🐟 A carpa ficou completamente cansada e precisa de recuperar.");
                 }
-                else
-                {
-                    Debug.Log("🐟 A carpa cansou da arrancada.");
-                }
+                else Debug.Log("🐟 A carpa cansou da arrancada.");
             }
 
             UpdateDistance();
@@ -122,28 +110,16 @@ public class FishFightController : MonoBehaviour
 
         cooldownTimer -= deltaTime;
 
-        if (exhaustedTimer > 0f)
-        {
-            exhaustedTimer -= deltaTime;
-        }
-        else
-        {
-            stamina = Mathf.Min(maxStamina, stamina + staminaRecoveryPerSecond * deltaTime);
-        }
+        if (exhaustedTimer > 0f) exhaustedTimer -= deltaTime;
+        else stamina = Mathf.Min(maxStamina, stamina + staminaRecoveryPerSecond * deltaTime);
 
         if (Keyboard.current != null && Keyboard.current.rKey.isPressed)
-        {
             ReelRig(deltaTime);
-        }
 
         UpdateDistance();
 
-        // Só pode fazer uma nova arrancada depois de recuperar alguma stamina
-        // e de terminar o período de descanso.
         if (cooldownTimer <= 0f && exhaustedTimer <= 0f && stamina > maxStamina * 0.6f)
-        {
             StartBurst();
-        }
     }
 
     private void StartBurst()
@@ -166,43 +142,64 @@ public class FishFightController : MonoBehaviour
 
     private void ReelRig(float deltaTime)
     {
-        // Primeiro puxamos o rig/chumbo. O pescador não move diretamente a carpa.
-        Vector3 rigToPlayer = playerTransform.position - hookedSinker.transform.position;
-        rigToPlayer.y = 0f;
-
-        float rigDistance = rigToPlayer.magnitude;
-        if (rigDistance > 0.001f)
-        {
-            float movement = Mathf.Min(reelSpeed * deltaTime, rigDistance);
-            hookedSinker.transform.position += rigToPlayer.normalized * movement;
-        }
-
-        // A carpa oferece resistência e só acompanha o rig gradualmente.
         Vector3 fishToRig = hookedSinker.transform.position - transform.position;
         fishToRig.y = 0f;
+        float fishRigDistanceBefore = fishToRig.magnitude;
 
-        float fishRigDistance = fishToRig.magnitude;
-        if (fishRigDistance > 0.001f)
+        // Quanto mais cansada a carpa está, menos consegue resistir.
+        float fatigue = 1f - stamina / maxStamina;
+        float resistance = Mathf.Lerp(1f, 0.25f, fatigue) * fishStrength;
+
+        // O carreto tenta puxar o chumbo para o pescador.
+        Vector3 rigToPlayer = playerTransform.position - hookedSinker.transform.position;
+        rigToPlayer.y = 0f;
+        float rigDistance = rigToPlayer.magnitude;
+
+        if (rigDistance > 0.001f)
         {
-            float resistanceFactor = Mathf.Lerp(0.35f, 1f, 1f - stamina / maxStamina);
-            float followSpeed = fishResistanceSpeed * resistanceFactor;
+            float requestedMovement = Mathf.Min(reelSpeed * deltaTime, rigDistance);
 
-            if (fishRigDistance > maxRigFishDistance)
-            {
-                followSpeed *= 1.5f;
-            }
+            // Se a linha já está esticada, a resistência da carpa reduz o avanço.
+            float tension = Mathf.Clamp01(fishRigDistanceBefore / maxRigFishDistance);
+            float resistanceFactor = Mathf.Lerp(1f, 1f - resistanceStrength * resistance, tension);
+            float actualMovement = requestedMovement * resistanceFactor;
 
-            float fishMovement = Mathf.Min(followSpeed * deltaTime, fishRigDistance);
-            transform.position += fishToRig.normalized * fishMovement;
+            hookedSinker.transform.position += rigToPlayer.normalized * actualMovement;
         }
 
-        // Recolher também cansa a carpa ligeiramente.
+        // Depois do movimento do chumbo, a carpa tenta acompanhá-lo.
+        Vector3 updatedFishToRig = hookedSinker.transform.position - transform.position;
+        updatedFishToRig.y = 0f;
+        float fishRigDistance = updatedFishToRig.magnitude;
+
+        if (fishRigDistance > 0.001f)
+        {
+            float followFactor = Mathf.Lerp(0.25f, 1f, fatigue);
+            float followSpeed = fishResistanceSpeed * (1f + followFactor);
+            float fishMovement = Mathf.Min(followSpeed * deltaTime, fishRigDistance);
+            transform.position += updatedFishToRig.normalized * fishMovement;
+        }
+
+        // A linha nunca pode ficar infinitamente esticada.
+        // Se o chumbo se afastar demasiado, a tensão puxa ambos para uma
+        // distância máxima, em vez de deixar o peixe simplesmente descolar.
+        Vector3 finalFishToRig = hookedSinker.transform.position - transform.position;
+        finalFishToRig.y = 0f;
+        float finalDistance = finalFishToRig.magnitude;
+
+        if (finalDistance > maxRigFishDistance)
+        {
+            Vector3 correction = finalFishToRig.normalized * (finalDistance - maxRigFishDistance);
+            float fishShare = Mathf.Clamp01(0.35f + fatigue * 0.35f);
+
+            transform.position += correction * fishShare;
+            hookedSinker.transform.position -= correction * (1f - fishShare);
+        }
+
         stamina = Mathf.Max(0f, stamina - staminaDrainPerSecond * 0.08f * deltaTime);
 
         if (Vector3.Distance(transform.position, playerTransform.position) <= minimumDistance)
-        {
             EndFight();
-        }
     }
 
     private void MoveFishAndRig(Vector3 direction, float distance)
@@ -211,16 +208,10 @@ public class FishFightController : MonoBehaviour
         movement.y = 0f;
 
         transform.position += movement;
-
-        if (hookedSinker != null)
-        {
-            hookedSinker.transform.position += movement;
-        }
+        if (hookedSinker != null) hookedSinker.transform.position += movement;
 
         if (movement.sqrMagnitude > 0.001f)
-        {
             transform.rotation = Quaternion.LookRotation(movement.normalized, Vector3.up);
-        }
     }
 
     private void UpdateDistance()
@@ -233,15 +224,8 @@ public class FishFightController : MonoBehaviour
         isFighting = false;
         isBursting = false;
 
-        if (hookedSinker != null)
-        {
-            hookedSinker.DetachFish();
-        }
-
-        if (fishingLine != null)
-        {
-            fishingLine.Clear();
-        }
+        if (hookedSinker != null) hookedSinker.DetachFish();
+        if (fishingLine != null) fishingLine.Clear();
 
         Debug.Log("🎣 Combate terminado — peixe e rig libertados.");
     }
