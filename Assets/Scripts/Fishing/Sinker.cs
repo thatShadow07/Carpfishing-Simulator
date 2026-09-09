@@ -76,6 +76,7 @@ public class Sinker : MonoBehaviour
 
     public void AttachFish(Transform fish) => attachedFish = fish;
     public void DetachFish() => attachedFish = null;
+    public Transform GetAttachedFish() => attachedFish;
 
     public void MoveWithFish(Vector3 delta)
     {
