@@ -6,6 +6,7 @@ using UnityEngine;
 /// A ferragem é determinada pela interação peixe + montagem, não pelo F.
 /// O F representa a reação do pescador ao alarme.
 /// </summary>
+[RequireComponent(typeof(FishFightController))]
 public class FishAI : MonoBehaviour
 {
     public enum FishState
@@ -51,9 +52,14 @@ public class FishAI : MonoBehaviour
     private Transform baitTarget;
     private float investigateTimer;
     private float hookTimer;
-    private float alarmTimer;
     private float nextBaitCheckTime;
     private bool hookSet;
+    private FishFightController fightController;
+
+    private void Awake()
+    {
+        fightController = GetComponent<FishFightController>();
+    }
 
     private void Start()
     {
@@ -135,7 +141,6 @@ public class FishAI : MonoBehaviour
 
         if (investigateTimer < investigateDuration) return;
 
-        // A carpa pode aproximar-se e desistir sem comer o isco.
         if (Random.value > biteChance)
         {
             Debug.Log("A carpa investigou o isco, mas não o comeu.");
@@ -144,7 +149,6 @@ public class FishAI : MonoBehaviour
             return;
         }
 
-        // A carpa come o isco. Só depois avaliamos se o anzol ficou realmente cravado.
         hookSet = Random.value <= hookChance;
         hookTimer = 0f;
 
@@ -165,32 +169,30 @@ public class FishAI : MonoBehaviour
     {
         hookTimer += Time.deltaTime;
 
-        // O F já não decide se a carpa fica presa.
-        // Representa o jogador a reagir ao alarme e pegar na cana.
-        if (hookTimer >= hookDelay && !hookSet)
-        {
-            ReturnToRoaming();
-            return;
-        }
-
-        if (hookTimer >= hookDelay && hookTimer < hookDelay + 0.05f)
+        if (hookTimer >= hookDelay && hookTimer < hookDelay + Time.deltaTime)
         {
             Debug.Log("🔔 BITE ALARM! A carpa está presa — reage e pega na cana!");
         }
 
         if (hookTimer >= alarmReactionWindow)
         {
-            Debug.Log("🐟 A carpa continua a puxar — combate começa mesmo sem reação imediata.");
-            currentState = FishState.Fighting;
+            BeginFighting("🐟 A carpa continua a puxar — combate começa mesmo sem reação imediata.");
             return;
         }
 
         if (UnityEngine.InputSystem.Keyboard.current != null &&
-            UnityEngine.InputSystem.Keyboard.current.fKey.wasPressedThisFrame)
+            UnityEngine.InputSystem.Keyboard.current.fKey.wasPressedThisFrame &&
+            hookTimer >= hookDelay)
         {
-            Debug.Log("🎣 Pegaste na cana! A carpa está presa e começa o combate.");
-            currentState = FishState.Fighting;
+            BeginFighting("🎣 Pegaste na cana! A carpa está presa e começa o combate.");
         }
+    }
+
+    private void BeginFighting(string message)
+    {
+        Debug.Log(message);
+        currentState = FishState.Fighting;
+        fightController.BeginFight();
     }
 
     private void SwimTowardsTarget()
