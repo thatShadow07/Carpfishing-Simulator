@@ -4,7 +4,8 @@ using UnityEngine.InputSystem;
 /// <summary>
 /// Comportamento básico da carpa. Nada em 3D dentro de uma área fixa do
 /// lago, deteta o isco (Sinker), investiga-o, decide morder, e dá ao
-/// jogador uma janela curta para ferrar (F) antes de fugir.
+/// jogador uma janela curta para ferrar (F) antes de fugir. Depois de
+/// fugir ou desistir, ignora esse isco durante um período de "desconfiança".
 /// </summary>
 public class FishAI : MonoBehaviour
 {
@@ -40,6 +41,7 @@ public class FishAI : MonoBehaviour
     [SerializeField] private float biteDistance = 0.5f;
     [SerializeField] private float investigateDuration = 2f;
     [SerializeField, Range(0f, 1f)] private float biteChance = 0.7f;
+    [SerializeField] private float baitCooldown = 6f; // segundos a ignorar o isco depois de fugir/desistir
 
     [Header("Ferragem (Hook Set)")]
     [SerializeField] private float reactionWindow = 2f; // segundos para premir F depois do bite
@@ -48,6 +50,7 @@ public class FishAI : MonoBehaviour
     private Transform baitTarget;
     private float investigateTimer;
     private float hookedTimer;
+    private float nextBaitCheckTime;
 
     private void Start()
     {
@@ -86,6 +89,7 @@ public class FishAI : MonoBehaviour
 
     private void CheckForBait()
     {
+        if (Time.time < nextBaitCheckTime) return;
         if (Sinker.Current == null || !Sinker.Current.IsInWater) return;
 
         float distance = Vector3.Distance(transform.position, Sinker.Current.transform.position);
@@ -141,6 +145,7 @@ public class FishAI : MonoBehaviour
         {
             Debug.Log("A carpa desistiu do isco.");
             baitTarget = null;
+            nextBaitCheckTime = Time.time + baitCooldown;
             currentState = FishState.Roaming;
             ChooseNewDestination();
         }
@@ -161,6 +166,7 @@ public class FishAI : MonoBehaviour
         {
             Debug.Log("A carpa fugiu - não ferraste a tempo.");
             baitTarget = null;
+            nextBaitCheckTime = Time.time + baitCooldown;
             currentState = FishState.Roaming;
             ChooseNewDestination();
         }
