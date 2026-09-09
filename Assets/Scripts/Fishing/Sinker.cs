@@ -1,9 +1,7 @@
 using UnityEngine;
 
-// Placeholder do chumbo/rig lançado. Ao tocar na água, para de cair por
-// física normal e desce lentamente até ao fundo real do lago (via WaterDepth).
-// Expõe-se como Sinker.Current para que o FishAI o possa encontrar sem
-// precisar de uma referência direta.
+// Representa o chumbo/rig lançado. Durante o combate pode ficar ligado à
+// carpa para que chumbo, linha e peixe formem o mesmo conjunto.
 public class Sinker : MonoBehaviour
 {
     public static Sinker Current { get; private set; }
@@ -15,26 +13,18 @@ public class Sinker : MonoBehaviour
     private bool hasLanded;
     private bool isSinking;
     private float targetBottomY;
+    private Transform attachedFish;
 
     private void Awake()
     {
-        if (rb == null)
-        {
-            rb = GetComponent<Rigidbody>();
-        }
+        if (rb == null) rb = GetComponent<Rigidbody>();
     }
 
-    private void OnEnable()
-    {
-        Current = this;
-    }
+    private void OnEnable() => Current = this;
 
     private void OnDestroy()
     {
-        if (Current == this)
-        {
-            Current = null;
-        }
+        if (Current == this) Current = null;
     }
 
     private void OnCollisionEnter(Collision collision)
@@ -42,14 +32,8 @@ public class Sinker : MonoBehaviour
         if (hasLanded) return;
         hasLanded = true;
 
-        if (collision.gameObject.CompareTag("Water"))
-        {
-            LandInWater(collision.gameObject);
-        }
-        else
-        {
-            LandOnGround(collision);
-        }
+        if (collision.gameObject.CompareTag("Water")) LandInWater(collision.gameObject);
+        else LandOnGround(collision);
     }
 
     private void LandInWater(GameObject waterObject)
@@ -59,13 +43,11 @@ public class Sinker : MonoBehaviour
         IsInWater = true;
 
         WaterDepth waterDepth = waterObject.GetComponent<WaterDepth>();
-
         if (waterDepth != null)
         {
             float depth = waterDepth.GetDepthAt(transform.position);
             targetBottomY = waterDepth.GetBottomHeightAt(transform.position);
             isSinking = true;
-
             Debug.Log($"Rig entrou na água. Profundidade neste ponto: {depth:F1} m.");
         }
         else
@@ -79,20 +61,24 @@ public class Sinker : MonoBehaviour
         if (!isSinking) return;
 
         Vector3 position = transform.position;
-
         if (position.y > targetBottomY)
         {
             position.y = Mathf.MoveTowards(position.y, targetBottomY, sinkSpeed * Time.deltaTime);
             transform.position = position;
         }
-        else
-        {
-            isSinking = false;
-        }
+        else isSinking = false;
     }
 
     private void LandOnGround(Collision collision)
     {
         Debug.Log($"O lançamento caiu em terra ({collision.gameObject.name}), não na água.");
+    }
+
+    public void AttachFish(Transform fish) => attachedFish = fish;
+    public void DetachFish() => attachedFish = null;
+
+    public void MoveWithFish(Vector3 delta)
+    {
+        if (attachedFish != null) attachedFish.position += delta;
     }
 }
