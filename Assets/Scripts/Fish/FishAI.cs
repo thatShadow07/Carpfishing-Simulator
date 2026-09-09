@@ -1,11 +1,10 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 /// <summary>
 /// Comportamento básico da carpa. Nada em 3D dentro de uma área fixa do
-/// lago, deteta o isco (Sinker), investiga-o, decide morder, e dá ao
-/// jogador uma janela curta para ferrar (F) antes de fugir. Depois de
-/// fugir ou desistir, ignora esse isco durante um período de "desconfiança".
+/// lago, deteta o isco, investiga-o e pode alimentar-se dele.
+/// A ferragem é determinada pela interação peixe + montagem, não pelo F.
+/// O F representa a reação do pescador ao alarme.
 /// </summary>
 public class FishAI : MonoBehaviour
 {
@@ -41,16 +40,20 @@ public class FishAI : MonoBehaviour
     [SerializeField] private float biteDistance = 0.5f;
     [SerializeField] private float investigateDuration = 2f;
     [SerializeField, Range(0f, 1f)] private float biteChance = 0.7f;
-    [SerializeField] private float baitCooldown = 6f; // segundos a ignorar o isco depois de fugir/desistir
+    [SerializeField] private float baitCooldown = 6f;
 
-    [Header("Ferragem (Hook Set)")]
-    [SerializeField] private float reactionWindow = 2f; // segundos para premir F depois do bite
+    [Header("Hooking")]
+    [SerializeField, Range(0f, 1f)] private float hookChance = 0.85f;
+    [SerializeField] private float hookDelay = 0.75f;
+    [SerializeField] private float alarmReactionWindow = 2f;
 
     private Vector3 targetPosition;
     private Transform baitTarget;
     private float investigateTimer;
-    private float hookedTimer;
+    private float hookTimer;
+    private float alarmTimer;
     private float nextBaitCheckTime;
+    private bool hookSet;
 
     private void Start()
     {
@@ -82,7 +85,6 @@ public class FishAI : MonoBehaviour
             case FishState.Feeding:
             case FishState.Fighting:
             case FishState.Landing:
-                // Combate/landing: próximos passos
                 break;
         }
     }
@@ -105,8 +107,7 @@ public class FishAI : MonoBehaviour
     {
         if (baitTarget == null)
         {
-            currentState = FishState.Roaming;
-            ChooseNewDestination();
+            ReturnToRoaming();
             return;
         }
 
@@ -126,8 +127,7 @@ public class FishAI : MonoBehaviour
     {
         if (baitTarget == null)
         {
-            currentState = FishState.Roaming;
-            ChooseNewDestination();
+            ReturnToRoaming();
             return;
         }
 
@@ -135,40 +135,61 @@ public class FishAI : MonoBehaviour
 
         if (investigateTimer < investigateDuration) return;
 
-        if (Random.value <= biteChance)
+        // A carpa pode aproximar-se e desistir sem comer o isco.
+        if (Random.value > biteChance)
         {
-            Debug.Log("🔔 BITE ALARM! Prime F para ferrar!");
-            hookedTimer = 0f;
+            Debug.Log("A carpa investigou o isco, mas não o comeu.");
+            nextBaitCheckTime = Time.time + baitCooldown;
+            ReturnToRoaming();
+            return;
+        }
+
+        // A carpa come o isco. Só depois avaliamos se o anzol ficou realmente cravado.
+        hookSet = Random.value <= hookChance;
+        hookTimer = 0f;
+
+        if (hookSet)
+        {
+            Debug.Log("🐟 A carpa comeu o isco — o anzol começou a cravar.");
             currentState = FishState.Hooked;
         }
         else
         {
-            Debug.Log("A carpa desistiu do isco.");
-            baitTarget = null;
+            Debug.Log("🐟 A carpa comeu o isco, mas o anzol não ficou cravado.");
             nextBaitCheckTime = Time.time + baitCooldown;
-            currentState = FishState.Roaming;
-            ChooseNewDestination();
+            ReturnToRoaming();
         }
     }
 
     private void HandleHooked()
     {
-        hookedTimer += Time.deltaTime;
+        hookTimer += Time.deltaTime;
 
-        if (Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame)
+        // O F já não decide se a carpa fica presa.
+        // Representa o jogador a reagir ao alarme e pegar na cana.
+        if (hookTimer >= hookDelay && !hookSet)
         {
-            Debug.Log("Ferrado! A carpa está presa.");
-            currentState = FishState.Fighting; // combate: próximo passo
+            ReturnToRoaming();
             return;
         }
 
-        if (hookedTimer >= reactionWindow)
+        if (hookTimer >= hookDelay && hookTimer < hookDelay + 0.05f)
         {
-            Debug.Log("A carpa fugiu - não ferraste a tempo.");
-            baitTarget = null;
-            nextBaitCheckTime = Time.time + baitCooldown;
-            currentState = FishState.Roaming;
-            ChooseNewDestination();
+            Debug.Log("🔔 BITE ALARM! A carpa está presa — reage e pega na cana!");
+        }
+
+        if (hookTimer >= alarmReactionWindow)
+        {
+            Debug.Log("🐟 A carpa continua a puxar — combate começa mesmo sem reação imediata.");
+            currentState = FishState.Fighting;
+            return;
+        }
+
+        if (UnityEngine.InputSystem.Keyboard.current != null &&
+            UnityEngine.InputSystem.Keyboard.current.fKey.wasPressedThisFrame)
+        {
+            Debug.Log("🎣 Pegaste na cana! A carpa está presa e começa o combate.");
+            currentState = FishState.Fighting;
         }
     }
 
@@ -220,6 +241,14 @@ public class FishAI : MonoBehaviour
         }
 
         return Random.Range(bottom, surface);
+    }
+
+    private void ReturnToRoaming()
+    {
+        baitTarget = null;
+        hookSet = false;
+        currentState = FishState.Roaming;
+        ChooseNewDestination();
     }
 
     public FishState GetState() => currentState;
