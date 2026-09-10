@@ -62,8 +62,6 @@ public class Sinker : MonoBehaviour
         if (rb == null)
             return;
 
-        // Do not depend on water collision events. Detect the water from its
-        // actual surface height so the sinker cannot simply pass through it.
         if (!IsInWater)
         {
             WaterDepth detectedWater = FindWaterAtPosition();
@@ -82,20 +80,18 @@ public class Sinker : MonoBehaviour
 
         targetBottomY = currentWater.GetBottomHeightAt(transform.position);
 
-        // The bottom is the only thing that stops the sinker.
         if (transform.position.y <= targetBottomY + bottomStopDistance)
         {
             SetOnBottom();
             return;
         }
 
-        // Effective downward weight while submerged.
         rb.AddForce(Vector3.down * sinkAcceleration, ForceMode.Acceleration);
     }
 
     private WaterDepth FindWaterAtPosition()
     {
-        WaterDepth[] waters = FindObjectsByType<WaterDepth>(FindObjectsSortMode.None);
+        WaterDepth[] waters = FindObjectsByType<WaterDepth>();
         WaterDepth closest = null;
         float closestHorizontalSqr = float.PositiveInfinity;
 
