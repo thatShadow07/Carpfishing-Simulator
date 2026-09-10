@@ -69,9 +69,11 @@ public class CastingSystem : MonoBehaviour
             return;
 
         currentSinker = Instantiate(sinkerPrefab, castOrigin.position, castOrigin.rotation);
-        // While idle the rig follows the rod. Physics starts only at release.
-        currentSinker.transform.SetParent(castOrigin, true);
-        currentSinker.isKinematic = true;
+        // The rig is always a free Rigidbody held by FishingLine. This lets it
+        // hang naturally from the rod before casting.
+        currentSinker.isKinematic = false;
+        currentSinker.linearVelocity = Vector3.zero;
+        currentSinker.angularVelocity = Vector3.zero;
 
         if (fishingLine != null)
             fishingLine.SetTarget(currentSinker.transform);
@@ -89,7 +91,6 @@ public class CastingSystem : MonoBehaviour
         float chargePercent = chargeTime > 0f ? chargeTimer / chargeTime : 0f;
         float force = Mathf.Lerp(minForce, maxForce, chargePercent);
 
-        currentSinker.transform.SetParent(null, true);
         currentSinker.isKinematic = false;
         currentSinker.linearVelocity = Vector3.zero;
         currentSinker.angularVelocity = Vector3.zero;
