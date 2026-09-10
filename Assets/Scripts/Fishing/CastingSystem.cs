@@ -19,11 +19,13 @@ public class CastingSystem : MonoBehaviour
 
     private CastState state = CastState.Idle;
     private float chargeTimer;
+    private Rigidbody currentSinker;
 
     private void OnEnable()
     {
         state = CastState.Idle;
         chargeTimer = 0f;
+        CreateHangingSinker();
     }
 
     private void Update()
@@ -53,9 +55,7 @@ public class CastingSystem : MonoBehaviour
                 chargeTimer = Mathf.Min(chargeTimer + Time.deltaTime, chargeTime);
 
                 if (Mouse.current.leftButton.wasReleasedThisFrame)
-                {
                     Cast();
-                }
                 break;
 
             case CastState.InFlight:
@@ -63,40 +63,63 @@ public class CastingSystem : MonoBehaviour
         }
     }
 
-    private void Cast()
+    private void CreateHangingSinker()
     {
-        float chargePercent = chargeTimer / chargeTime;
-        float force = Mathf.Lerp(minForce, maxForce, chargePercent);
+        if (currentSinker != null || sinkerPrefab == null || castOrigin == null)
+            return;
 
-        Vector3 origin = castOrigin != null ? castOrigin.position : transform.position;
-        Vector3 direction = playerCamera.transform.forward;
-
-        Rigidbody sinker = Instantiate(sinkerPrefab, origin, Quaternion.identity);
-        sinker.AddForce(direction * force, ForceMode.VelocityChange);
+        currentSinker = Instantiate(sinkerPrefab, castOrigin.position, Quaternion.identity);
+        currentSinker.linearVelocity = Vector3.zero;
+        currentSinker.angularVelocity = Vector3.zero;
 
         if (fishingLine != null)
-        {
-            fishingLine.SetTarget(sinker.transform);
-        }
+            fishingLine.SetTarget(currentSinker.transform);
 
         if (fishingReel != null)
-        {
-            fishingReel.SetSinker(sinker);
-        }
+            fishingReel.SetSinker(currentSinker);
+    }
+
+    private void Cast()
+    {
+        CreateHangingSinker();
+        if (currentSinker == null || playerCamera == null)
+            return;
+
+        float chargePercent = chargeTime > 0f ? chargeTimer / chargeTime : 0f;
+        float force = Mathf.Lerp(minForce, maxForce, chargePercent);
+
+        currentSinker.isKinematic = false;
+        currentSinker.linearVelocity = Vector3.zero;
+        currentSinker.angularVelocity = Vector3.zero;
+        currentSinker.AddForce(playerCamera.transform.forward * force, ForceMode.VelocityChange);
 
         Debug.Log($"Lançamento a {chargePercent:P0} de força ({force:F1})");
         state = CastState.InFlight;
     }
 
-    // Chamado pelo FishingReel quando o rig é totalmente recolhido
     public void ResetCast()
     {
         state = CastState.Idle;
         chargeTimer = 0f;
 
         if (fishingLine != null)
-        {
             fishingLine.Clear();
+
+        if (currentSinker != null)
+        {
+            Destroy(currentSinker.gameObject);
+            currentSinker = null;
+        }
+
+        CreateHangingSinker();
+    }
+
+    private void OnDisable()
+    {
+        if (currentSinker != null)
+        {
+            Destroy(currentSinker.gameObject);
+            currentSinker = null;
         }
     }
 
