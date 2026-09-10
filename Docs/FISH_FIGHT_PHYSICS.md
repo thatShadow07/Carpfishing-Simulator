@@ -191,3 +191,15 @@ A física base deve permitir depois:
 Uma luta deve parecer diferente quando se altera peso, força, linha ou carreto sem ser necessário adicionar regras especiais para cada caso.
 
 Se uma carpa de 10 kg estiver a fazer uma arrancada, o jogador deve sentir que está a lutar contra uma força que nasce do próprio sistema. Quando a carpa se cansar, deve ficar progressivamente mais controlável, e não simplesmente parar.
+
+
+## Implementação atual
+
+Para evitar que vários componentes controlem o mesmo objeto, a responsabilidade fica dividida assim:
+
+- `FishingLine` é a única fonte de verdade para o alvo, o comprimento disponível, a tensão, a quebra e a ligação física.
+- `FishFightController` aplica forças ao `Rigidbody` da carpa, atualiza a intenção de fuga e pede recuperação de linha; não altera a posição da carpa diretamente.
+- `Sinker` acompanha apenas o peixe fisgado para manter o rig visível, sem tentar simultaneamente aplicar física de fundo.
+- `FishingReel` deve continuar a tratar da recolha fora de uma luta; durante uma luta, o controlador usa a mesma entrada para recuperar comprimento de linha.
+
+Esta separação foi introduzida porque a implementação anterior criava uma joint para o chumbo e, no início da luta, mudava a linha para a carpa enquanto outros componentes ainda moviam peixe, chumbo e linha diretamente. O resultado era um estado inconsistente e uma luta que não obedecia às próprias regras físicas descritas acima.
