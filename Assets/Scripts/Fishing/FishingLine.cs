@@ -125,7 +125,12 @@ public class FishingLine : MonoBehaviour
         lineRenderer.enabled = false;
     }
 
-    private void SetLineLength(float newLength)
+    public void ResetLineLength()
+    {
+        SetLineLength(defaultLineLength);
+    }
+
+    public void SetLineLength(float newLength)
     {
         physicalLineLength = Mathf.Max(minimumLineLength, newLength);
 
