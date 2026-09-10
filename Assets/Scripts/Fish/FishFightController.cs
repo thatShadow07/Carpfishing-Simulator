@@ -1,11 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-/// <summary>
-/// Controla a luta depois da carpa ser fisgada.
-/// O peixe tem arrancadas, stamina, direção e distância máxima.
-/// O jogador controla a recuperação com R (temporário nesta primeira versão).
-/// </summary>
 [RequireComponent(typeof(FishAI))]
 public class FishFightController : MonoBehaviour
 {
@@ -26,7 +21,6 @@ public class FishFightController : MonoBehaviour
 
     [Header("Fight Distance")]
     [SerializeField, Min(1f)] private float maximumFishDistance = 30f;
-    [SerializeField, Min(0.1f)] private float minimumRigDistance = 0.5f;
     [SerializeField, Min(0.1f)] private float maximumRigDistance = 3f;
 
     [Header("Burst")]
@@ -73,22 +67,12 @@ public class FishFightController : MonoBehaviour
     public void BeginFight()
     {
         if (isFighting) return;
-
-        if (playerTransform == null)
-        {
-            Debug.LogWarning("FishFightController: atribui o Player Transform no Inspector.");
-            return;
-        }
+        if (playerTransform == null) { Debug.LogWarning("FishFightController: atribui o Player Transform no Inspector."); return; }
 
         hookedSinker = Sinker.Current;
-        if (hookedSinker == null || !hookedSinker.IsInWater)
-        {
-            Debug.LogWarning("FishFightController: não existe um Sinker na água para ligar à carpa.");
-            return;
-        }
+        if (hookedSinker == null || !hookedSinker.IsInWater) { Debug.LogWarning("FishFightController: não existe um Sinker na água para ligar à carpa."); return; }
 
         data = fishAI != null ? fishAI.SpeciesData : data;
-
         if (data != null)
         {
             fishWeight = data.WeightKg;
@@ -106,60 +90,41 @@ public class FishFightController : MonoBehaviour
         hookedSinker.AttachFish(transform);
         if (fishingLine != null) fishingLine.SetTarget(transform);
         if (fishAI != null) fishAI.OnFightStarted();
-
         Debug.Log($"COMBATE! Carpa {fishWeight:F1} kg / força {fishStrength:F2}");
+    }
+
+    public void EndFight()
+    {
+        if (!isFighting && state == FishFightState.Landed) return;
+        FinishFight(true, "A carpa foi recolhida com sucesso.");
     }
 
     private void Update()
     {
         if (!isFighting) return;
-
-        if (playerTransform == null || hookedSinker == null)
-        {
-            Debug.LogWarning("FishFightController: faltam Player Transform ou Sinker.");
-            return;
-        }
+        if (playerTransform == null || hookedSinker == null) { Debug.LogWarning("FishFightController: faltam Player Transform ou Sinker."); return; }
 
         float deltaTime = Time.deltaTime;
         float distance = Vector3.Distance(transform.position, playerTransform.position);
+        if (distance > maximumFishDistance) { FinishFight(false, "A carpa ganhou distância suficiente e escapou."); return; }
 
-        if (distance > maximumFishDistance)
-        {
-            FinishFight(false, "A carpa ganhou distância suficiente e escapou.");
-            return;
-        }
-
-        if (burstTimer > 0f)
-        {
-            UpdateBurst(deltaTime);
-            return;
-        }
+        if (burstTimer > 0f) { UpdateBurst(deltaTime); return; }
 
         burstCooldown -= deltaTime;
         bool reeling = Keyboard.current != null && Keyboard.current.rKey.isPressed;
-
-        if (reeling) PullRigAndFish(deltaTime);
-        else RecoverStamina(deltaTime);
+        if (reeling) PullRigAndFish(deltaTime); else RecoverStamina(deltaTime);
 
         if (stamina <= maxStamina * exhaustedThreshold)
         {
-            if (state != FishFightState.Tired)
-            {
-                state = FishFightState.Tired;
-                if (fishAI != null) fishAI.OnFightTired();
-            }
+            if (state != FishFightState.Tired) { state = FishFightState.Tired; if (fishAI != null) fishAI.OnFightTired(); }
         }
         else if (state == FishFightState.Tired && stamina >= maxStamina * tiredThreshold)
         {
-            state = FishFightState.Fighting;
-            if (fishAI != null) fishAI.OnFightStarted();
+            state = FishFightState.Fighting; if (fishAI != null) fishAI.OnFightStarted();
         }
 
-        if (burstCooldown <= 0f && state != FishFightState.Tired && ShouldBurst())
-            StartBurst();
-
-        if (distance <= minimumLandingDistance && stamina <= maxStamina * exhaustedThreshold)
-            FinishFight(true, "A carpa está cansada e pronta para ser levantada.");
+        if (burstCooldown <= 0f && state != FishFightState.Tired && ShouldBurst()) StartBurst();
+        if (distance <= minimumLandingDistance && stamina <= maxStamina * exhaustedThreshold) FinishFight(true, "A carpa está cansada e pronta para ser levantada.");
     }
 
     private void RecoverStamina(float deltaTime)
@@ -171,7 +136,6 @@ public class FishFightController : MonoBehaviour
     private bool ShouldBurst()
     {
         if (stamina <= maxStamina * 0.25f) return false;
-
         float chance = data != null ? data.BurstChance : 0.5f;
         float aggression = data != null ? data.Aggression : 0.5f;
         chance *= Mathf.Lerp(0.55f, 1.5f, aggression);
@@ -183,10 +147,8 @@ public class FishFightController : MonoBehaviour
         state = FishFightState.Burst;
         burstTimer = Random.Range(burstDurationMin, burstDurationMax);
         burstCooldown = Random.Range(burstCooldownMin, burstCooldownMax);
-
         float speed = burstSpeed * Random.Range(1f - burstSpeedVariation, 1f + burstSpeedVariation);
         if (data != null) speed *= Mathf.Max(0.5f, data.Strength);
-
         burstDirection = ChooseBurstDirection() * speed;
         Debug.Log("A carpa arrancou!");
     }
@@ -195,17 +157,14 @@ public class FishFightController : MonoBehaviour
     {
         float drainMultiplier = data != null ? data.StaminaDrainMultiplier : 1f;
         stamina = Mathf.Max(0f, stamina - staminaDrainPerSecond * drainMultiplier * deltaTime);
-
         Vector3 movement = burstDirection * deltaTime;
         movement.y = 0f;
         transform.position += movement;
-
         if (movement.sqrMagnitude > 0.001f)
         {
             Quaternion targetRotation = Quaternion.LookRotation(movement.normalized, Vector3.up);
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 5f * deltaTime);
         }
-
         burstTimer -= deltaTime;
         if (stamina <= 0f || burstTimer <= 0f)
         {
@@ -221,36 +180,24 @@ public class FishFightController : MonoBehaviour
         awayFromPlayer.y = 0f;
         if (awayFromPlayer.sqrMagnitude < 0.01f) awayFromPlayer = -playerTransform.forward;
         awayFromPlayer.Normalize();
-
         Vector3 obstacleDirection = FindObstacleDirection();
         float obstacleSeeking = data != null ? data.ObstacleSeeking : obstacleFallbackChance;
-        if (obstacleDirection != Vector3.zero && Random.value < obstacleSeeking)
-            return obstacleDirection;
-
-        float angle = Random.Range(-35f, 35f);
-        return Quaternion.Euler(0f, angle, 0f) * awayFromPlayer;
+        if (obstacleDirection != Vector3.zero && Random.value < obstacleSeeking) return obstacleDirection;
+        return Quaternion.Euler(0f, Random.Range(-35f, 35f), 0f) * awayFromPlayer;
     }
 
     private Vector3 FindObstacleDirection()
     {
         if (obstacleMask.value == 0) return Vector3.zero;
-
         Collider[] hits = Physics.OverlapSphere(transform.position, obstacleCheckDistance, obstacleMask);
         if (hits.Length == 0) return Vector3.zero;
-
         Collider closest = hits[0];
         float closestDistance = Vector3.Distance(transform.position, closest.transform.position);
-
         foreach (Collider hit in hits)
         {
             float distance = Vector3.Distance(transform.position, hit.transform.position);
-            if (distance < closestDistance)
-            {
-                closest = hit;
-                closestDistance = distance;
-            }
+            if (distance < closestDistance) { closest = hit; closestDistance = distance; }
         }
-
         Vector3 direction = closest.transform.position - transform.position;
         direction.y = 0f;
         return direction.sqrMagnitude > 0.01f ? direction.normalized : Vector3.zero;
@@ -259,46 +206,26 @@ public class FishFightController : MonoBehaviour
     private void PullRigAndFish(float deltaTime)
     {
         if (hookedSinker == null) return;
-
         Vector3 rigToPlayer = playerTransform.position - hookedSinker.transform.position;
         rigToPlayer.y = 0f;
-        if (rigToPlayer.sqrMagnitude > 0.001f)
-        {
-            float reel = reelSpeed * deltaTime;
-            hookedSinker.transform.position += rigToPlayer.normalized * reel;
-        }
-
+        if (rigToPlayer.sqrMagnitude > 0.001f) hookedSinker.transform.position += rigToPlayer.normalized * reelSpeed * deltaTime;
         Vector3 fishToRig = hookedSinker.transform.position - transform.position;
         fishToRig.y = 0f;
         float rigDistance = fishToRig.magnitude;
-
-        if (rigDistance > maximumRigDistance)
-        {
-            Vector3 pull = fishToRig.normalized * fishFollowSpeed * deltaTime;
-            transform.position += pull;
-        }
-
-        if (Vector3.Distance(transform.position, playerTransform.position) <= minimumLandingDistance && stamina <= maxStamina * exhaustedThreshold)
-            FinishFight(true, "A carpa chegou à distância de aterragem.");
+        if (rigDistance > maximumRigDistance) transform.position += fishToRig.normalized * fishFollowSpeed * deltaTime;
     }
 
     private void FinishFight(bool landed, string reason)
     {
         isFighting = false;
         state = landed ? FishFightState.Landed : FishFightState.Lost;
-
-        if (hookedSinker != null)
-            hookedSinker.DetachFish();
-
-        if (fishingLine != null)
-            fishingLine.Clear();
-
+        if (hookedSinker != null) hookedSinker.DetachFish();
+        if (fishingLine != null) fishingLine.Clear();
         if (fishAI != null)
         {
             if (landed) fishAI.OnFishLanded();
             else fishAI.OnFishLost();
         }
-
         Debug.Log(reason);
     }
 }
