@@ -1,10 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-// Recolhe o rig lançado até à ponta da cana. Se houver uma carpa presa (em
-// combate), é o FishFightController que assume TODO o controlo do rig - o
-// FishingReel não lhe toca enquanto isso durar, para não haver dois sistemas
-// a mover a mesma coisa ao mesmo tempo.
 public class FishingReel : MonoBehaviour
 {
     [Header("Referências")]
@@ -18,71 +14,39 @@ public class FishingReel : MonoBehaviour
 
     private Rigidbody currentSinker;
 
-    public void SetSinker(Rigidbody sinker)
-    {
-        currentSinker = sinker;
-    }
+    public void SetSinker(Rigidbody sinker) => currentSinker = sinker;
 
     private void Update()
     {
         if (currentSinker == null || castOrigin == null) return;
-
         Sinker sinker = currentSinker.GetComponent<Sinker>();
-
-        // Enquanto houver uma carpa presa, é o FishFightController que manda
-        // no rig - ele já trata da resistência, arrancadas e tensão.
         if (sinker != null && sinker.GetAttachedFish() != null) return;
-
         if (Keyboard.current == null || !Keyboard.current.rKey.isPressed) return;
 
         currentSinker.isKinematic = true;
-
         Vector3 current = currentSinker.position;
         Vector3 target = castOrigin.position;
-
-        float horizontalDistance = Vector3.Distance(
-            new Vector3(current.x, 0f, current.z),
-            new Vector3(target.x, 0f, target.z));
-
-        Vector3 desiredPoint = horizontalDistance > liftDistance
-            ? new Vector3(target.x, current.y, target.z)
-            : target;
-
-        Vector3 newPosition = Vector3.MoveTowards(
-            current,
-            desiredPoint,
-            reelSpeed * Time.deltaTime);
-
+        float horizontalDistance = Vector3.Distance(new Vector3(current.x, 0f, current.z), new Vector3(target.x, 0f, target.z));
+        Vector3 desiredPoint = horizontalDistance > liftDistance ? new Vector3(target.x, current.y, target.z) : target;
+        Vector3 newPosition = Vector3.MoveTowards(current, desiredPoint, reelSpeed * Time.deltaTime);
         currentSinker.MovePosition(newPosition);
 
-        if (Vector3.Distance(newPosition, target) <= catchDistance)
-        {
-            FinishReel();
-        }
+        if (Vector3.Distance(newPosition, target) <= catchDistance) FinishReel();
     }
 
     private void FinishReel()
     {
-        Sinker sinker = currentSinker.GetComponent<Sinker>();
+        Sinker sinker = currentSinker.GetComponent< Sinker>();
         Transform attachedFish = sinker != null ? sinker.GetAttachedFish() : null;
-
         if (attachedFish != null)
         {
             FishFightController fight = attachedFish.GetComponent<FishFightController>();
-            if (fight != null)
-            {
-                fight.EndFight();
-            }
+            if (fight != null) fight.EndFight(FishFightResult.Landed);
         }
 
         Destroy(currentSinker.gameObject);
         currentSinker = null;
-
-        if (castingSystem != null)
-        {
-            castingSystem.ResetCast();
-        }
-
+        if (castingSystem != null) castingSystem.ResetCast();
         Debug.Log("Rig recolhido.");
     }
 }
