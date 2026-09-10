@@ -86,7 +86,7 @@ public class FishingLine : MonoBehaviour
         ClearPhysicalJoint();
 
         target = newTarget;
-        targetBody = null;
+        this.targetBody = null;
         previousDistance = target != null && lineStart != null
             ? Vector3.Distance(lineStart.position, target.position)
             : 0f;
