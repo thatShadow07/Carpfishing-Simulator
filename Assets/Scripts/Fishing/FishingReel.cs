@@ -24,10 +24,10 @@ public class FishingReel : MonoBehaviour
     private void Update()
     {
         if (currentSinker == null || castOrigin == null) return;
+        if (Keyboard.current == null) return;
 
         Sinker sinker = currentSinker.GetComponent<Sinker>();
         if (sinker != null && sinker.GetAttachedFish() != null) return;
-        if (Keyboard.current == null) return;
 
         float distanceToOrigin = Vector3.Distance(currentSinker.position, castOrigin.position);
 
@@ -40,6 +40,12 @@ public class FishingReel : MonoBehaviour
             if (offset.sqrMagnitude > 0.0001f)
             {
                 Vector3 direction = offset.normalized;
+
+                // If the sinker has settled on the lake bed it becomes kinematic
+                // for stability. Reeling must release it before applying pull.
+                if (sinker != null && sinker.IsOnBottom)
+                    sinker.ReleaseFromBottom(direction);
+
                 currentSinker.AddForce(direction * reelForce, ForceMode.Force);
             }
         }
