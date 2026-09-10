@@ -69,6 +69,8 @@ public class CastingSystem : MonoBehaviour
             return;
 
         currentSinker = Instantiate(sinkerPrefab, castOrigin.position, Quaternion.identity);
+        // While idle the rig belongs to the rod. Physics starts only at release.
+        currentSinker.isKinematic = true;
         currentSinker.linearVelocity = Vector3.zero;
         currentSinker.angularVelocity = Vector3.zero;
 
