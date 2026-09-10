@@ -1,5 +1,8 @@
 using UnityEngine;
 
+// Phase 1 physical rig root. The lead Rigidbody remains under physics at every
+// stage; the lake bed and a hooked fish are represented by breakable joints.
+[RequireComponent(typeof(Rigidbody))]
 public class Sinker : MonoBehaviour
 {
     public static Sinker Current { get; private set; }
@@ -10,15 +13,18 @@ public class Sinker : MonoBehaviour
     [SerializeField, Min(0f)] private float sinkAcceleration = 7f;
     [SerializeField, Min(0f)] private float waterDrag = 1.5f;
 
-    [Header("Water Detection")]
-    [SerializeField, Min(0f)] private float waterEntryTolerance = 0.05f;
-    [SerializeField, Min(0f)] private float bottomStopDistance = 0.03f;
+    [Header("Lake Bed")]
+    [SerializeField, Min(0.1f)] private float bottomHoldingForce = 25f;
+    [SerializeField, Min(0.1f)] private float bottomHoldingTorque = 25f;
+
+    [Header("Hook Connection")]
+    [SerializeField, Min(0.1f)] private float hookConnectionStrength = 12f;
 
     [Header("Rig")]
     [SerializeField, Min(0.01f)] private float rigLength = 0.35f;
 
     public bool IsInWater { get; private set; }
-    public bool IsOnBottom { get; private set; }
+    public bool IsOnBottom => bottomHoldJoint != null;
     public bool IsBeingRetrieved { get; private set; }
     public Rigidbody Rigidbody => rb;
     public float MassKg => massKg;
@@ -27,15 +33,13 @@ public class Sinker : MonoBehaviour
     public WaterDepth CurrentWater => currentWater;
 
     private WaterDepth currentWater;
-    private float targetBottomY;
+    private FixedJoint bottomHoldJoint;
+    private FixedJoint fishConnectionJoint;
 
     private void Awake()
     {
         if (rb == null)
             rb = GetComponent<Rigidbody>();
-
-        if (rb == null)
-            rb = gameObject.AddComponent<Rigidbody>();
 
         rb.mass = massKg;
         rb.useGravity = true;
@@ -63,59 +67,23 @@ public class Sinker : MonoBehaviour
         if (rb == null)
             return;
 
-        // The rig is visually and physically carried by the hooked fish.
-        // FishingLine targets the fish directly during a fight, so this object
-        // must only follow it and must not run its own bottom physics.
-        if (AttachedFish != null)
-        {
-            rb.isKinematic = true;
-            rb.position = AttachedFish.position;
-            rb.rotation = AttachedFish.rotation;
-            return;
-        }
-
         if (!IsInWater)
         {
             WaterDepth detectedWater = FindWaterAtPosition();
-            if (detectedWater != null && transform.position.y <= detectedWater.SurfaceHeight + waterEntryTolerance)
+            if (detectedWater != null && transform.position.y <= detectedWater.SurfaceHeight)
                 EnterWater(detectedWater);
         }
 
-        if (IsBeingRetrieved)
-        {
-            // Reeling is an explicit state: do not make the lead sink or lock
-            // again while the player is bringing it back to the rod.
-            rb.useGravity = false;
-            rb.isKinematic = false;
-            rb.linearDamping = waterDrag;
-            return;
-        }
-
-        if (IsOnBottom)
-        {
-            // A settled lead must not be displaced by fish colliders or slope
-            // jitter. AttachFish releases this lock only after a real hookup.
-            rb.useGravity = false;
-            rb.isKinematic = true;
-            return;
-        }
-
         if (!IsInWater || currentWater == null)
-        {
-            rb.useGravity = true;
             return;
-        }
 
         rb.useGravity = false;
         rb.linearDamping = waterDrag;
 
-        targetBottomY = currentWater.GetBottomHeightAt(transform.position);
-
-        if (transform.position.y <= targetBottomY + bottomStopDistance)
-        {
-            SetOnBottom();
+        // A bottom joint holds the lead against the lake bed. Reeling or a
+        // hookup destroys that joint; neither path writes to the Transform.
+        if (IsOnBottom || IsBeingRetrieved || AttachedFish != null)
             return;
-        }
 
         rb.AddForce(Vector3.down * sinkAcceleration, ForceMode.Acceleration);
     }
@@ -128,15 +96,16 @@ public class Sinker : MonoBehaviour
 
         foreach (WaterDepth water in waters)
         {
-            if (water == null) continue;
+            if (water == null)
+                continue;
 
             float dx = transform.position.x - water.transform.position.x;
             float dz = transform.position.z - water.transform.position.z;
-            float sqr = dx * dx + dz * dz;
+            float horizontalSqr = dx * dx + dz * dz;
 
-            if (sqr < closestHorizontalSqr)
+            if (horizontalSqr < closestHorizontalSqr)
             {
-                closestHorizontalSqr = sqr;
+                closestHorizontalSqr = horizontalSqr;
                 closest = water;
             }
         }
@@ -146,117 +115,106 @@ public class Sinker : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        WaterDepth depth = other.GetComponent<WaterDepth>();
-        if (depth == null)
-            depth = other.GetComponentInParent<WaterDepth>();
-
+        WaterDepth depth = other.GetComponentInParent<WaterDepth>();
         if (depth != null)
             EnterWater(depth);
     }
 
     private void OnCollisionEnter(Collision collision)
     {
-        WaterDepth depth = collision.gameObject.GetComponent<WaterDepth>();
-        if (depth == null)
-            depth = collision.gameObject.GetComponentInParent<WaterDepth>();
-
+        WaterDepth depth = collision.gameObject.GetComponentInParent<WaterDepth>();
         if (depth != null)
         {
-            Physics.IgnoreCollision(GetComponent<Collider>(), collision.collider, true);
+            Collider ownCollider = GetComponent<Collider>();
+            if (ownCollider != null)
+                Physics.IgnoreCollision(ownCollider, collision.collider, true);
+
             EnterWater(depth);
             return;
         }
 
-        if (!IsInWater || currentWater == null)
+        if (!IsInWater || currentWater == null || IsBeingRetrieved || AttachedFish != null)
             return;
 
-        // Collider contact happens while the object's centre is still above the
-        // terrain, so checking only its Y position lets the lead slide downhill.
-        ContactPoint contact = collision.contactCount > 0 ? collision.GetContact(0) : default;
-        if (collision.contactCount > 0 && contact.normal.y > 0.2f)
-        {
-            targetBottomY = currentWater.GetBottomHeightAt(transform.position);
-            SetOnBottom();
-        }
+        if (collision.contactCount > 0 && collision.GetContact(0).normal.y > 0.2f)
+            HoldOnLakeBed();
     }
 
     private void EnterWater(WaterDepth depth)
     {
-        if (depth == null)
+        if (depth == null || currentWater == depth)
             return;
 
         currentWater = depth;
         IsInWater = true;
-        IsOnBottom = false;
         IsBeingRetrieved = false;
-        targetBottomY = currentWater.GetBottomHeightAt(transform.position);
-
         rb.useGravity = false;
-        rb.isKinematic = false;
         rb.linearDamping = waterDrag;
-        rb.linearVelocity = new Vector3(rb.linearVelocity.x, Mathf.Min(rb.linearVelocity.y, 0f), rb.linearVelocity.z);
     }
 
-    private void SetOnBottom()
+    private void HoldOnLakeBed()
     {
-        IsOnBottom = true;
-        IsBeingRetrieved = false;
+        if (IsOnBottom)
+            return;
 
-        Vector3 p = transform.position;
-        p.y = targetBottomY;
-        transform.position = p;
+        bottomHoldJoint = gameObject.AddComponent<FixedJoint>();
+        bottomHoldJoint.connectedBody = null;
+        bottomHoldJoint.breakForce = bottomHoldingForce;
+        bottomHoldJoint.breakTorque = bottomHoldingTorque;
+        bottomHoldJoint.enableCollision = false;
 
         rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
-        rb.useGravity = false;
-        rb.isKinematic = true;
-        rb.constraints = RigidbodyConstraints.FreezeAll;
-    }
-
-    public void AttachFish(Transform fish)
-    {
-        AttachedFish = fish;
-        IsBeingRetrieved = false;
-        IsOnBottom = false;
-        if (rb != null)
-            rb.constraints = RigidbodyConstraints.None;
     }
 
     public void BeginRetrieval()
     {
-        if (AttachedFish != null || !IsOnBottom || rb == null)
+        if (AttachedFish != null || rb == null)
             return;
 
-        IsOnBottom = false;
+        ReleaseLakeBedHold();
         IsBeingRetrieved = true;
-        rb.constraints = RigidbodyConstraints.None;
-        rb.isKinematic = false;
-        rb.useGravity = false;
-        rb.linearVelocity = Vector3.zero;
-        rb.angularVelocity = Vector3.zero;
+    }
+
+    public void AttachFish(Transform fish)
+    {
+        if (fish == null || AttachedFish != null)
+            return;
+
+        Rigidbody fishBody = fish.GetComponent<Rigidbody>();
+        if (fishBody == null)
+        {
+            Debug.LogWarning("Sinker: o peixe fisgado precisa de Rigidbody.", fish);
+            return;
+        }
+
+        ReleaseLakeBedHold();
+        IsBeingRetrieved = false;
+        AttachedFish = fish;
+
+        fishConnectionJoint = gameObject.AddComponent<FixedJoint>();
+        fishConnectionJoint.connectedBody = fishBody;
+        fishConnectionJoint.breakForce = hookConnectionStrength;
+        fishConnectionJoint.breakTorque = hookConnectionStrength;
+        fishConnectionJoint.enableCollision = false;
     }
 
     public void DetachFish()
     {
+        if (fishConnectionJoint != null)
+            Destroy(fishConnectionJoint);
+
+        fishConnectionJoint = null;
         AttachedFish = null;
-        if (rb != null && IsInWater)
-        {
-            rb.isKinematic = false;
-            rb.useGravity = false;
-            rb.constraints = RigidbodyConstraints.None;
-        }
     }
-    public Transform GetAttachedFish() => AttachedFish;
 
-    public void MoveRig(Vector3 delta)
+    private void ReleaseLakeBedHold()
     {
-        if (rb != null && !rb.isKinematic)
-            rb.MovePosition(rb.position + delta);
-        else if (rb != null)
-            rb.position += delta;
-        else
-            transform.position += delta;
+        if (bottomHoldJoint != null)
+            Destroy(bottomHoldJoint);
+
+        bottomHoldJoint = null;
     }
 
-    public void MoveWithFish(Vector3 delta) { }
+    public Transform GetAttachedFish() => AttachedFish;
 }
