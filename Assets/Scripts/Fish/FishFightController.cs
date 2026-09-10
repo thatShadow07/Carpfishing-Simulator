@@ -206,8 +206,6 @@ public class FishFightController : MonoBehaviour
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 5f * deltaTime);
         }
 
-        if (hookedSinker != null) hookedSinker.MoveWithFish(movement);
-
         burstTimer -= deltaTime;
         if (stamina <= 0f || burstTimer <= 0f)
         {
@@ -278,7 +276,6 @@ public class FishFightController : MonoBehaviour
         {
             Vector3 pull = fishToRig.normalized * fishFollowSpeed * deltaTime;
             transform.position += pull;
-            hookedSinker.MoveWithFish(pull);
         }
 
         if (Vector3.Distance(transform.position, playerTransform.position) <= minimumLandingDistance && stamina <= maxStamina * exhaustedThreshold)
@@ -291,12 +288,10 @@ public class FishFightController : MonoBehaviour
         state = landed ? FishFightState.Landed : FishFightState.Lost;
 
         if (hookedSinker != null)
-        {
             hookedSinker.DetachFish();
-            if (landed) hookedSinker.IsInWater.ToString();
-        }
 
-        if (fishingLine != null) fishingLine.Clear();
+        if (fishingLine != null)
+            fishingLine.Clear();
 
         if (fishAI != null)
         {
