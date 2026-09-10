@@ -154,4 +154,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Sinker
   rb: {fileID: 0}
-  sinkSpeed: 2
+  massKg: 0.09
+  sinkAcceleration: 7
+  waterDrag: 0.35
+  bottomStopDistance: 0.03
+  rigLength: 0.35
