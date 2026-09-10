@@ -23,6 +23,7 @@ public class FishingLine : MonoBehaviour
     private Transform jointAnchor;
     private Rigidbody jointAnchorBody;
     private ConfigurableJoint physicalJoint;
+    private Rigidbody targetBody;
     private float previousDistance;
     private float tension;
     private float physicalLineLength;
@@ -64,6 +65,16 @@ public class FishingLine : MonoBehaviour
         float targetTension = extension * effectiveSpring + Mathf.Max(0f, radialSpeed) * 0.1f;
         previousDistance = distance;
 
+        // The joint defines the allowed line length; this force is the load
+        // transmitted by a taut line. It also makes reel recovery reliable
+        // across Rigidbody and ConfigurableJoint settings.
+        if (targetBody != null && !targetBody.isKinematic && targetTension > 0f)
+        {
+            Vector3 towardRod = lineStart.position - target.position;
+            if (towardRod.sqrMagnitude > 0.0001f)
+                targetBody.AddForce(towardRod.normalized * targetTension, ForceMode.Force);
+        }
+
         tension = Mathf.MoveTowards(tension, targetTension, tensionSmoothing * Time.fixedDeltaTime);
 
         if (tension >= breakingStrain)
@@ -75,6 +86,7 @@ public class FishingLine : MonoBehaviour
         ClearPhysicalJoint();
 
         target = newTarget;
+        targetBody = null;
         previousDistance = target != null && lineStart != null
             ? Vector3.Distance(lineStart.position, target.position)
             : 0f;
@@ -97,6 +109,7 @@ public class FishingLine : MonoBehaviour
             return;
         }
 
+        this.targetBody = targetBody;
         CreatePhysicalJoint(targetBody);
         lineRenderer.enabled = true;
     }
@@ -121,6 +134,7 @@ public class FishingLine : MonoBehaviour
     {
         ClearPhysicalJoint();
         target = null;
+        targetBody = null;
         tension = 0f;
         IsBroken = false;
         lineRenderer.enabled = false;
