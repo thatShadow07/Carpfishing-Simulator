@@ -8,13 +8,14 @@ public class FishFightController : MonoBehaviour
     [SerializeField] private FishAI fishAI;
     [SerializeField] private Transform playerTransform;
     [SerializeField] private FishingLine fishingLine;
+
     [Header("Fight Equipment")]
     [SerializeField, Min(0.1f)] private float lineBreakingStrain = 6f;
     [SerializeField, Range(0f, 1f)] private float dragSetting = 0.45f;
     [SerializeField, Min(0.1f)] private float reelSpeed = 2f;
-    [SerializeField, Min(0.1f)] private float maximumRigDistance = 3f;
     [SerializeField, Min(0.1f)] private float minimumLandingDistance = 2f;
     [SerializeField, Min(0.1f)] private float maximumFishDistance = 30f;
+
     [Header("Fish Movement")]
     [SerializeField, Min(0.1f)] private float baseRunSpeed = 2.5f;
     [SerializeField, Min(0.1f)] private float burstSpeed = 5f;
@@ -23,11 +24,12 @@ public class FishFightController : MonoBehaviour
     [SerializeField, Min(0f)] private float burstCooldownMin = 3f;
     [SerializeField, Min(0f)] private float burstCooldownMax = 8f;
     [SerializeField, Range(0f, 1f)] private float burstChance = 0.5f;
+
     [Header("Stamina")]
     [SerializeField, Min(0f)] private float staminaDrainPerSecond = 10f;
-    [SerializeField, Min(0f)] private float staminaRecoveryPerSecond = 3f;
     [SerializeField, Range(0f, 1f)] private float tiredThreshold = 0.3f;
     [SerializeField, Range(0f, 1f)] private float exhaustedThreshold = 0.1f;
+
     [Header("Fight Behaviour")]
     [SerializeField, Range(0f, 1f)] private float directionChangeChance = 0.4f;
     [SerializeField, Range(0f, 1f)] private float obstacleSeeking = 0.3f;
@@ -68,9 +70,7 @@ public class FishFightController : MonoBehaviour
         fishBody = GetComponent<Rigidbody>();
         if (fishBody == null) fishBody = gameObject.AddComponent<Rigidbody>();
         fishBody.useGravity = false;
-        fishBody.isKinematic = false;
-        fishBody.linearDamping = 2f;
-        fishBody.angularDamping = 5f;
+        fishBody.isKinematic = true;
         ResolvePlayer();
     }
 
@@ -86,9 +86,10 @@ public class FishFightController : MonoBehaviour
     {
         if (isFighting) return;
         ResolvePlayer();
-        if (playerTransform == null) { Debug.LogWarning("FishFightController: não encontrei Player Transform nem objeto com tag Player."); return; }
+        if (playerTransform == null) { Debug.LogWarning("FishFightController: não encontrei o Player."); return; }
         hookedSinker = Sinker.Current;
-        if (hookedSinker == null || !hookedSinker.IsInWater) { Debug.LogWarning("FishFightController: não existe um Sinker válido na água."); return; }
+        if (hookedSinker == null || !hookedSinker.IsInWater) { Debug.LogWarning("FishFightController: não existe Sinker válido na água."); return; }
+
         data = fishAI != null ? fishAI.SpeciesData : data;
         if (data != null)
         {
@@ -100,6 +101,7 @@ public class FishFightController : MonoBehaviour
             obstacleSeeking = data.ObstacleSeeking;
             directionChangeChance = data.DirectionChangeChance;
         }
+
         stamina = maxStamina;
         lineTension = 0f;
         burstTimer = 0f;
@@ -142,9 +144,9 @@ public class FishFightController : MonoBehaviour
             directionTimer = Random.Range(directionChangeIntervalMin, directionChangeIntervalMax);
             if (Random.value <= directionChangeChance) ChooseRunDirection(false);
         }
+
         float speed = (burstTimer > 0f ? burstSpeed : baseRunSpeed) * Mathf.Lerp(0.35f, 1f, StaminaNormalized);
-        Vector3 movement = runDirection * speed * Time.deltaTime;
-        transform.position += movement;
+        transform.position += runDirection * speed * Time.deltaTime;
         if (runDirection.sqrMagnitude > 0.001f)
             transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(runDirection, Vector3.up), 4f * Time.deltaTime);
     }
@@ -172,8 +174,7 @@ public class FishFightController : MonoBehaviour
             if (toRig.sqrMagnitude > 0.01f && Random.value < obstacleSeeking * 0.35f)
                 direction = Vector3.Slerp(direction, -toRig.normalized, obstacleSeeking).normalized;
         }
-        if (Physics.Raycast(transform.position, direction, obstacleCheckDistance, obstacleMask, QueryTriggerInteraction.Ignore))
-            direction = -direction;
+        if (Physics.Raycast(transform.position, direction, obstacleCheckDistance, obstacleMask, QueryTriggerInteraction.Ignore)) direction = -direction;
         runDirection = direction;
     }
 
@@ -186,10 +187,8 @@ public class FishFightController : MonoBehaviour
         float dragForce = dragSetting * lineBreakingStrain;
         float movementForce = Mathf.Max(0f, Vector3.Dot(runDirection, -toRod.normalized)) * fishStrength * (fishWeight * 0.12f);
         float desiredTension = movementForce + dragForce * Mathf.Clamp01(distanceToRod / maximumFishDistance);
-        if (fishingLine != null) lineTension = fishingLine.CalculateTension(desiredTension);
-        else lineTension = Mathf.MoveTowards(lineTension, desiredTension, 8f * Time.deltaTime);
-        if (lineTension > 0f && fishBody != null)
-            fishBody.AddForce(toRod.normalized * lineTension * Mathf.Lerp(0.25f, 1f, dragSetting), ForceMode.Force);
+        lineTension = fishingLine != null ? fishingLine.CalculateTension(desiredTension) : Mathf.MoveTowards(lineTension, desiredTension, 8f * Time.deltaTime);
+
         if (lineTension >= lineBreakingStrain) { EndFight(FishFightResult.LineBroken); return; }
         if (hookedSinker.AttachedFish != transform) hookedSinker.AttachFish(transform);
     }
@@ -216,9 +215,8 @@ public class FishFightController : MonoBehaviour
         if (Keyboard.current.downArrowKey.isPressed) dragSetting = Mathf.Clamp01(dragSetting - 0.2f * Time.deltaTime);
         if (Keyboard.current.rKey.isPressed && DistanceFromPlayer > minimumLandingDistance)
         {
-            float reelAmount = reelSpeed * Time.deltaTime;
             Vector3 towardPlayer = (playerTransform.position - transform.position).normalized;
-            transform.position += towardPlayer * reelAmount * Mathf.Lerp(0.2f, 1f, 1f - StaminaNormalized);
+            transform.position += towardPlayer * reelSpeed * Time.deltaTime * Mathf.Lerp(0.2f, 1f, 1f - StaminaNormalized);
         }
     }
 
@@ -227,12 +225,9 @@ public class FishFightController : MonoBehaviour
         if (playerTransform == null) return;
         float distance = Vector3.Distance(transform.position, playerTransform.position);
         if (distance > maximumFishDistance) { EndFight(FishFightResult.Escaped); return; }
-        if (stamina <= maxStamina * exhaustedThreshold && distance <= minimumLandingDistance)
-            EndFight(FishFightResult.Landed);
+        if (stamina <= maxStamina * exhaustedThreshold && distance <= minimumLandingDistance) EndFight(FishFightResult.Landed);
     }
 
-    // Public because FishingReel can end the fight when the reel system detects
-    // a terminal condition. Keeping the single exit point avoids duplicated cleanup.
     public void EndFight(FishFightResult result)
     {
         if (!isFighting) return;
