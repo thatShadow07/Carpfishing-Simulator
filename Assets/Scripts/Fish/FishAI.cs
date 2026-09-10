@@ -36,13 +36,14 @@ public class FishAI : MonoBehaviour
 
     [Header("Bait")]
     [SerializeField, Min(0.1f)] private float detectionRadius = 4f;
-    [SerializeField, Min(0.1f)] private float investigateDistance = 0.6f;
+    [SerializeField, Min(0.1f)] private float investigateDistance = 0.9f;
     [SerializeField, Min(0.1f)] private float inspectTimeMin = 1f;
     [SerializeField, Min(0.1f)] private float inspectTimeMax = 4f;
-    [SerializeField, Range(0f, 1f)] private float biteChance = 0.7f;
-    [SerializeField, Range(0f, 1f)] private float hookChance = 0.85f;
+    [SerializeField, Range(0f, 1f)] private float biteChance = 0.8f;
+    [SerializeField, Range(0f, 1f)] private float hookChance = 0.95f;
     [SerializeField, Min(0f)] private float baitCooldown = 8f;
-    [SerializeField, Min(0.1f)] private float feedingDistanceMultiplier = 1.5f;
+    [SerializeField, Min(0.1f)] private float feedingDistanceMultiplier = 1.35f;
+    [SerializeField, Min(0.1f)] private float minimumHookDistance = 1.2f;
 
     [Header("Reaction")]
     [SerializeField, Min(0.1f)] private float fearDistance = 2f;
@@ -134,13 +135,13 @@ public class FishAI : MonoBehaviour
             return;
         }
 
-        // Stop approaching once the fish reaches the inspection zone.
-        // The previous implementation kept moving forward even when it was already
-        // almost on top of the sinker, which caused the visible shaking/oscillation.
+        // Outside the inspection zone the fish approaches normally.
+        // Inside it the fish MUST stop translating. This prevents the old
+        // overshoot/turn/overshoot loop that looked like trembling.
         if (distance > investigateDistance)
         {
             float approachSpeed = GetSwimmingSpeed() * Mathf.Lerp(1f, 0.45f, Caution);
-            SwimTowards(baitTarget.position, approachSpeed);
+            MoveTowardsWithoutOvershoot(baitTarget.position, approachSpeed, investigateDistance);
             return;
         }
 
@@ -152,7 +153,7 @@ public class FishAI : MonoBehaviour
 
         float chance = biteChance;
         chance += (Aggression - 0.5f) * 0.2f;
-        chance -= Caution * 0.2f;
+        chance -= Caution * 0.15f;
         chance += Random.Range(-randomBehaviour, randomBehaviour);
         chance = Mathf.Clamp01(chance);
 
@@ -176,29 +177,42 @@ public class FishAI : MonoBehaviour
         }
 
         float distance = Vector3.Distance(transform.position, baitTarget.position);
-        float feedingDistance = investigateDistance * feedingDistanceMultiplier;
+        float feedingDistance = Mathf.Max(minimumHookDistance, investigateDistance * feedingDistanceMultiplier);
 
-        if (distance > feedingDistance)
+        if (distance > escapeDistance)
         {
             LeaveBait();
             return;
         }
 
-        // Stay beside the bait while taking it instead of repeatedly trying to move
-        // through the same point. This gives the bite/hook decision a stable position.
+        // If the fish drifted slightly away, approach slowly. Never cross the bait.
+        if (distance > feedingDistance)
+        {
+            MoveTowardsWithoutOvershoot(baitTarget.position, GetSwimmingSpeed() * 0.2f, feedingDistance);
+            return;
+        }
+
+        // Stable feeding position: rotate only, do not translate.
         FaceTarget(baitTarget.position);
         inspectTimer += Time.deltaTime;
 
-        float takeTime = Mathf.Lerp(0.35f, 2f, Caution);
+        float takeTime = Mathf.Lerp(0.6f, 2.2f, Caution);
         if (inspectTimer < takeTime) return;
 
-        float chance = Mathf.Clamp01(hookChance + Aggression * 0.12f - Caution * 0.18f);
+        float chance = Mathf.Clamp01(hookChance + Aggression * 0.08f - Caution * 0.12f);
         if (Random.value > chance)
         {
+            // The fish rejected the bait. It leaves naturally instead of getting
+            // trapped in the feeding state.
             LeaveBait();
             return;
         }
 
+        TryHookFish();
+    }
+
+    private void TryHookFish()
+    {
         Sinker sinker = Sinker.Current;
         if (sinker == null || !sinker.IsInWater)
         {
@@ -206,19 +220,26 @@ public class FishAI : MonoBehaviour
             return;
         }
 
-        // The hook is now confirmed. BeginFight() is responsible for creating the
-        // physical fight connection to the active rig.
+        if (fightController == null)
+            fightController = GetComponent<FishFightController>();
+
         baitTarget = sinker.transform;
         ChangeState(FishState.Hooked);
         fightController.BeginFight();
 
-        // BeginFight() can refuse the fight if the Player or Sinker is not configured.
-        // Never leave the fish stuck in Hooked in that case.
-        if (!fightController.IsFighting)
+        if (fightController.IsFighting)
         {
-            ChangeState(FishState.Roaming);
-            nextBaitCheckTime = Time.time + 1f;
+            // FishFightController will immediately move us to Fighting through
+            // OnFightStarted(). From this point FishAI no longer controls roaming.
+            return;
         }
+
+        // BeginFight refused the hook. Do not lock the fish in Hooked and do not
+        // make it stare at the sinker forever. Give the rig a short retry window.
+        Debug.LogWarning("FishAI: a fisgada foi tentada, mas o FishFightController não iniciou o combate. Verifica Player Transform e Sinker.");
+        inspectTimer = 0f;
+        nextBaitCheckTime = Time.time + 1f;
+        ChangeState(FishState.Roaming);
     }
 
     private bool IsBaitValid()
@@ -261,6 +282,21 @@ public class FishAI : MonoBehaviour
         Quaternion desiredRotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
         transform.rotation = Quaternion.Slerp(transform.rotation, desiredRotation, turnSpeed * Time.deltaTime);
         transform.position += transform.forward * speed * Time.deltaTime;
+    }
+
+    private void MoveTowardsWithoutOvershoot(Vector3 destination, float speed, float stopDistance)
+    {
+        Vector3 offset = destination - transform.position;
+        float distance = offset.magnitude;
+        if (distance <= stopDistance) return;
+
+        Vector3 direction = offset / distance;
+        Quaternion desiredRotation = Quaternion.LookRotation(direction, Vector3.up);
+        transform.rotation = Quaternion.Slerp(transform.rotation, desiredRotation, turnSpeed * Time.deltaTime);
+
+        float maxStep = Mathf.Max(0f, distance - stopDistance);
+        float step = Mathf.Min(speed * Time.deltaTime, maxStep);
+        transform.position += transform.forward * step;
     }
 
     private void FaceTarget(Vector3 target)
