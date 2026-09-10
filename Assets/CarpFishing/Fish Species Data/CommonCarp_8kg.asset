@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d1d40c91b11efb4095f6e7aa4696492, type: 3}
+  m_Name: CommonCarp_8kg
+  m_EditorClassIdentifier: Assembly-CSharp::FishSpeciesData
+  speciesName: Common Carp
+  weightKg: 8
+  bodyStrength: 1
+  swimmingSpeed: 1.5
+  burstSpeed: 5
+  maxStamina: 100
+  staminaDrainMultiplier: 1
+  staminaRecoveryMultiplier: 1
+  caution: 0.5
+  aggression: 0.5
+  intelligence: 0.5
+  obstacleSeeking: 0.3
+  marginResistance: 0.5
+  burstChance: 0.5
+  baitConfidence: 0.5
+  headShakeChance: 0.35
+  directionChangeChance: 0.4
+  deepRunChance: 0.5
+  fightAggressionMultiplier: 1

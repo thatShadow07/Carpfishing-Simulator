@@ -335,8 +335,9 @@ GameObject:
   - component: {fileID: 219401224}
   - component: {fileID: 219401223}
   - component: {fileID: 219401222}
-  - component: {fileID: 219401221}
   - component: {fileID: 219401226}
+  - component: {fileID: 219401228}
+  - component: {fileID: 219401227}
   m_Layer: 0
   m_Name: Carp
   m_TagString: Untagged
@@ -344,35 +345,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &219401221
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 219401220}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a547ad22384747b4b94c638c3f04e7a2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::FishAI
-  currentState: 0
-  moveSpeed: 1.5
-  turnSpeed: 3
-  destinationReachedDistance: 0.5
-  lakeCenter: {x: -0.6, y: 0, z: 33.19}
-  swimRadius: 20
-  waterDepth: {fileID: 1264695419}
-  surfaceMargin: 0.5
-  bottomMargin: 0.5
-  detectionRadius: 4
-  biteDistance: 0.5
-  investigateDuration: 2
-  biteChance: 0.7
-  baitCooldown: 6
-  hookChance: 0.85
-  hookDelay: 0.75
-  alarmReactionWindow: 2
 --- !u!136 &219401222
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -480,35 +452,97 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 47f8d7c5c9515e3409ffbc35dea1e5ad, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FishFightController
-  fishWeight: 8
-  fishStrength: 1
-  maxStamina: 100
+  fishAI: {fileID: 219401227}
   playerTransform: {fileID: 1003823629}
   fishingLine: {fileID: 687003312}
-  minimumDistance: 1.5
+  lineBreakingStrain: 6
+  dragSetting: 0.45
   reelSpeed: 2
-  fishResistanceSpeed: 0.8
-  maxRigFishDistance: 2
+  fishFollowSpeed: 1.2
+  maximumRigDistance: 3
+  minimumLandingDistance: 2
+  maximumFishDistance: 30
+  baseLineTension: 0.4
+  reelTensionPerSecond: 1.2
+  tensionReleasePerSecond: 1.8
+  slackLossThreshold: 0.08
+  maximumSafeTension: 0.85
   burstDurationMin: 1.2
   burstDurationMax: 3
   burstCooldownMin: 3
   burstCooldownMax: 8
   burstSpeed: 4
-  burstSpeedVariance: 0.2
-  burstTriggerChancePerSecond: 0.5
-  minStaminaPercentForBurst: 0.6
+  burstSpeedVariation: 0.2
   staminaDrainPerSecond: 10
   staminaRecoveryPerSecond: 4
-  exhaustedRecoveryDelay: 3
-  resistanceStrength: 0.7
-  reelingRecoveryMultiplier: 0.1
-  overallFatigueGainPerStaminaPoint: 0.006
-  maxOverallFatigue: 0.85
-  overallFatigueStaminaCeilingImpact: 0.7
-  overallFatigueRecoveryPenalty: 0.6
-  overallFatigueBurstPenalty: 0.5
-  secondWindDistance: 4
-  secondWindChanceBoost: 1
+  exhaustedThreshold: 0.1
+  tiredThreshold: 0.3
+  obstacleFallbackChance: 0.25
+  obstacleCheckDistance: 6
+  obstacleMask:
+    serializedVersion: 2
+    m_Bits: 0
+--- !u!114 &219401227
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 219401220}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a547ad22384747b4b94c638c3f04e7a2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FishAI
+  speciesData: {fileID: 11400000, guid: ee36989799690be45bf8f6d7c331475e, type: 2}
+  currentState: 0
+  swimCenter: {x: 0.6, y: 1.1, z: 33.19}
+  swimRadius: 20
+  waterDepth: {fileID: 1264695419}
+  minDepth: 1
+  maxDepth: 8
+  moveSpeed: 1.5
+  turnSpeed: 3
+  destinationReachDistance: 0.5
+  destinationChangeDelayMin: 3
+  destinationChangeDelayMax: 8
+  detectionRadius: 4
+  investigateDistance: 0.6
+  inspectTimeMin: 1
+  inspectTimeMax: 4
+  biteChance: 0.7
+  hookChance: 0.85
+  baitCooldown: 6
+  fearDistance: 2
+  escapeDistance: 8
+  randomBehaviour: 0.15
+--- !u!54 &219401228
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 219401220}
+  serializedVersion: 5
+  m_Mass: 1
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 0
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
 --- !u!1 &240365734
 GameObject:
   m_ObjectHideFlags: 0
