@@ -1,58 +1,72 @@
 using UnityEngine;
 
-/// <summary>
-/// AI base da carpa durante a pesca.
-/// A carpa patrulha, deteta o rig, aproxima-se, investiga o isco e tenta comer.
-/// Quando fica fisgada, o FishFightController passa a controlar a luta.
-/// </summary>
 [RequireComponent(typeof(FishFightController))]
 public class FishAI : MonoBehaviour
 {
-    public enum FishState { Roaming, InvestigatingBait, Feeding, Hooked, Fighting, Tired, Landing, Lost, Landed }
+    public enum FishState
+    {
+        Roaming,
+        InvestigatingBait,
+        Feeding,
+        Hooked,
+        Fighting,
+        Tired,
+        Landing,
+        Lost,
+        Landed
+    }
 
-    [Header("Fish Profile")]
+    [Header("Fish Data")]
     [SerializeField] private FishSpeciesData speciesData;
     [SerializeField] private FishState currentState = FishState.Roaming;
 
-    [Header("Movement")]
-    [SerializeField, Min(0.1f)] private float moveSpeed = 1.5f;
-    [SerializeField, Min(0.1f)] private float turnSpeed = 3f;
-    [SerializeField, Min(0.1f)] private float destinationReachedDistance = 0.5f;
-
-    [Header("Swim Area")]
-    [SerializeField] private Vector3 lakeCenter;
+    [Header("Swimming Area")]
+    [SerializeField] private Vector3 swimCenter;
     [SerializeField, Min(1f)] private float swimRadius = 20f;
     [SerializeField] private WaterDepth waterDepth;
-    [SerializeField, Min(0f)] private float surfaceMargin = 0.5f;
-    [SerializeField, Min(0f)] private float bottomMargin = 0.5f;
+    [SerializeField, Min(0f)] private float minDepth = 1f;
+    [SerializeField, Min(0f)] private float maxDepth = 8f;
 
-    [Header("Bait Behaviour")]
+    [Header("Roaming")]
+    [SerializeField, Min(0.1f)] private float moveSpeed = 1.5f;
+    [SerializeField, Min(0.1f)] private float turnSpeed = 3f;
+    [SerializeField, Min(0.1f)] private float destinationReachDistance = 0.5f;
+    [SerializeField, Min(0.1f)] private float destinationChangeDelayMin = 3f;
+    [SerializeField, Min(0.1f)] private float destinationChangeDelayMax = 8f;
+
+    [Header("Bait")]
     [SerializeField, Min(0.1f)] private float detectionRadius = 4f;
     [SerializeField, Min(0.1f)] private float investigateDistance = 0.6f;
-    [SerializeField, Min(0.1f)] private float inspectDuration = 2.5f;
-    [SerializeField, Range(0f, 1f)] private float baseBiteChance = 0.7f;
-    [SerializeField, Range(0f, 1f)] private float baseHookChance = 0.85f;
+    [SerializeField, Min(0.1f)] private float inspectTimeMin = 1f;
+    [SerializeField, Min(0.1f)] private float inspectTimeMax = 4f;
+    [SerializeField, Range(0f, 1f)] private float biteChance = 0.7f;
+    [SerializeField, Range(0f, 1f)] private float hookChance = 0.85f;
     [SerializeField, Min(0f)] private float baitCooldown = 8f;
 
-    [Header("Behaviour Variation")]
-    [SerializeField, Min(0.1f)] private float destinationChangeMin = 3f;
-    [SerializeField, Min(0.1f)] private float destinationChangeMax = 8f;
-    [SerializeField, Range(0f, 1f)] private float randomInterestVariation = 0.15f;
+    [Header("Reaction")]
+    [SerializeField, Min(0.1f)] private float fearDistance = 2f;
+    [SerializeField, Min(0.1f)] private float escapeDistance = 8f;
+    [SerializeField, Range(0f, 1f)] private float randomBehaviour = 0.15f;
 
     private FishFightController fightController;
     private Transform baitTarget;
     private Vector3 targetPosition;
+    private float destinationTimer;
     private float inspectTimer;
     private float nextBaitCheckTime;
-    private float destinationTimer;
 
     public FishState CurrentState => currentState;
     public FishSpeciesData SpeciesData => speciesData;
     public float Caution => speciesData != null ? speciesData.Caution : 0.5f;
     public float Aggression => speciesData != null ? speciesData.Aggression : 0.5f;
     public float Intelligence => speciesData != null ? speciesData.Intelligence : 0.5f;
+    public float FearDistance => fearDistance;
+    public float EscapeDistance => escapeDistance;
 
-    private void Awake() => fightController = GetComponent<FishFightController>();
+    private void Awake()
+    {
+        fightController = GetComponent<FishFightController>();
+    }
 
     private void Start()
     {
@@ -62,24 +76,30 @@ public class FishAI : MonoBehaviour
 
     private void Update()
     {
-        if (currentState == FishState.Hooked || currentState == FishState.Fighting || currentState == FishState.Tired || currentState == FishState.Landing || currentState == FishState.Landed)
-            return;
-
         switch (currentState)
         {
-            case FishState.Roaming: UpdateRoaming(); break;
-            case FishState.InvestigatingBait: UpdateInvestigatingBait(); break;
-            case FishState.Feeding: UpdateFeeding(); break;
+            case FishState.Roaming:
+                UpdateRoaming();
+                break;
+            case FishState.InvestigatingBait:
+                UpdateInvestigatingBait();
+                break;
+            case FishState.Feeding:
+                UpdateFeeding();
+                break;
+            case FishState.Lost:
+                ResumeRoamingAfterLost();
+                break;
         }
     }
 
     private void UpdateRoaming()
     {
         destinationTimer -= Time.deltaTime;
-        SwimTowards(targetPosition, GetMovementSpeed());
+        SwimTowards(targetPosition, GetSwimmingSpeed());
         DetectBait();
 
-        if (destinationTimer <= 0f || Vector3.Distance(transform.position, targetPosition) <= destinationReachedDistance)
+        if (destinationTimer <= 0f || Vector3.Distance(transform.position, targetPosition) <= destinationReachDistance)
             ChooseNewDestination();
     }
 
@@ -90,7 +110,8 @@ public class FishAI : MonoBehaviour
         Sinker sinker = Sinker.Current;
         if (sinker == null || !sinker.IsInWater) return;
 
-        if (Vector3.Distance(transform.position, sinker.transform.position) > detectionRadius) return;
+        float distance = Vector3.Distance(transform.position, sinker.transform.position);
+        if (distance > detectionRadius) return;
 
         baitTarget = sinker.transform;
         inspectTimer = 0f;
@@ -99,73 +120,119 @@ public class FishAI : MonoBehaviour
 
     private void UpdateInvestigatingBait()
     {
-        if (!IsBaitValid()) { LeaveBait(); return; }
+        if (!IsBaitValid())
+        {
+            LeaveBait();
+            return;
+        }
 
         float distance = Vector3.Distance(transform.position, baitTarget.position);
-        SwimTowards(baitTarget.position, GetMovementSpeed() * Mathf.Lerp(1f, 0.45f, Caution));
+        if (distance > escapeDistance)
+        {
+            LeaveBait();
+            return;
+        }
+
+        float approachSpeed = GetSwimmingSpeed() * Mathf.Lerp(1f, 0.45f, Caution);
+        SwimTowards(baitTarget.position, approachSpeed);
+
         if (distance > investigateDistance) return;
 
         inspectTimer += Time.deltaTime;
-        float requiredTime = Mathf.Lerp(inspectDuration * 0.6f, inspectDuration * 1.8f, Caution);
-        if (inspectTimer < requiredTime) return;
+        float requiredInspection = Mathf.Lerp(inspectTimeMin, inspectTimeMax, Caution);
+        if (inspectTimer < requiredInspection) return;
 
-        float biteChance = Mathf.Clamp01(baseBiteChance + (Aggression - 0.5f) * 0.2f - Caution * 0.2f + Random.Range(-randomInterestVariation, randomInterestVariation));
-        if (Random.value <= biteChance)
+        float chance = biteChance;
+        chance += (Aggression - 0.5f) * 0.2f;
+        chance -= Caution * 0.2f;
+        chance += Random.Range(-randomBehaviour, randomBehaviour);
+        chance = Mathf.Clamp01(chance);
+
+        if (Random.value <= chance)
         {
             inspectTimer = 0f;
             ChangeState(FishState.Feeding);
         }
-        else LeaveBait();
+        else
+        {
+            LeaveBait();
+        }
     }
 
     private void UpdateFeeding()
     {
-        if (!IsBaitValid()) { LeaveBait(); return; }
+        if (!IsBaitValid())
+        {
+            LeaveBait();
+            return;
+        }
 
         float distance = Vector3.Distance(transform.position, baitTarget.position);
-        if (distance > investigateDistance * 1.5f) { LeaveBait(); return; }
+        if (distance > investigateDistance * 1.5f)
+        {
+            LeaveBait();
+            return;
+        }
 
-        SwimTowards(baitTarget.position, GetMovementSpeed() * 0.35f);
+        SwimTowards(baitTarget.position, GetSwimmingSpeed() * 0.25f);
         if (distance > investigateDistance) return;
 
         inspectTimer += Time.deltaTime;
-        float takeDelay = Mathf.Lerp(0.4f, 1.8f, Caution);
-        if (inspectTimer < takeDelay) return;
+        float takeTime = Mathf.Lerp(0.35f, 2f, Caution);
+        if (inspectTimer < takeTime) return;
 
-        float hookChance = Mathf.Clamp01(baseHookChance + Aggression * 0.12f - Caution * 0.18f);
-        if (Random.value <= hookChance)
+        float chance = Mathf.Clamp01(hookChance + Aggression * 0.12f - Caution * 0.18f);
+        if (Random.value > chance)
         {
-            Sinker sinker = Sinker.Current;
-            if (sinker == null || !sinker.IsInWater) { LeaveBait(); return; }
-
-            baitTarget = sinker.transform;
-            ChangeState(FishState.Hooked);
-            fightController.BeginFight();
+            LeaveBait();
+            return;
         }
-        else LeaveBait();
+
+        Sinker sinker = Sinker.Current;
+        if (sinker == null || !sinker.IsInWater)
+        {
+            LeaveBait();
+            return;
+        }
+
+        baitTarget = sinker.transform;
+        ChangeState(FishState.Hooked);
+        fightController.BeginFight();
+
+        if (!fightController.IsFighting)
+            ChangeState(FishState.Roaming);
     }
 
-    private bool IsBaitValid() => baitTarget != null && Sinker.Current != null && Sinker.Current.IsInWater;
+    private bool IsBaitValid()
+    {
+        return baitTarget != null && Sinker.Current != null && Sinker.Current.IsInWater;
+    }
 
     private void ChooseNewDestination()
     {
-        Vector2 randomCircle = Random.insideUnitCircle * swimRadius;
-        float x = lakeCenter.x + randomCircle.x;
-        float z = lakeCenter.z + randomCircle.y;
-        float y = ChooseDepthAt(x, z);
+        Vector2 randomPoint = Random.insideUnitCircle * swimRadius;
+        float x = swimCenter.x + randomPoint.x;
+        float z = swimCenter.z + randomPoint.y;
+        float y = ChooseDepth(x, z);
+
         targetPosition = new Vector3(x, y, z);
-        destinationTimer = Random.Range(destinationChangeMin, Mathf.Max(destinationChangeMin, destinationChangeMax));
+        destinationTimer = Random.Range(destinationChangeDelayMin, Mathf.Max(destinationChangeDelayMin, destinationChangeDelayMax));
     }
 
-    private float ChooseDepthAt(float x, float z)
+    private float ChooseDepth(float x, float z)
     {
-        if (waterDepth == null) return transform.position.y;
+        if (waterDepth == null)
+            return transform.position.y;
 
-        Vector3 point = new Vector3(x, waterDepth.SurfaceHeight, z);
-        float surface = waterDepth.SurfaceHeight - surfaceMargin;
-        float bottom = waterDepth.GetBottomHeightAt(point) + bottomMargin;
-        if (bottom >= surface) return transform.position.y;
-        return Random.Range(bottom, surface);
+        Vector3 sample = new Vector3(x, waterDepth.SurfaceHeight, z);
+        float bottom = waterDepth.GetBottomHeightAt(sample);
+        float shallowest = Mathf.Max(bottom + 0.5f, waterDepth.SurfaceHeight - maxDepth);
+        float deepest = Mathf.Min(waterDepth.SurfaceHeight - minDepth, waterDepth.SurfaceHeight - 0.1f);
+
+        if (shallowest >= deepest)
+            return transform.position.y;
+
+        return Random.Range(shallowest, deepest);
     }
 
     private void SwimTowards(Vector3 destination, float speed)
@@ -178,7 +245,10 @@ public class FishAI : MonoBehaviour
         transform.position += transform.forward * speed * Time.deltaTime;
     }
 
-    private float GetMovementSpeed() => speciesData != null ? speciesData.SwimmingSpeed : moveSpeed;
+    private float GetSwimmingSpeed()
+    {
+        return speciesData != null ? speciesData.SwimmingSpeed : moveSpeed;
+    }
 
     private void LeaveBait()
     {
@@ -190,8 +260,14 @@ public class FishAI : MonoBehaviour
     }
 
     public void OnFightStarted() => ChangeState(FishState.Fighting);
+
     public void OnFightTired() => ChangeState(FishState.Tired);
-    public void OnFishLanded() { baitTarget = null; ChangeState(FishState.Landed); }
+
+    public void OnFishLanded()
+    {
+        baitTarget = null;
+        ChangeState(FishState.Landed);
+    }
 
     public void OnFishLost()
     {
@@ -203,8 +279,12 @@ public class FishAI : MonoBehaviour
 
     public void ResumeRoamingAfterLost()
     {
-        if (currentState == FishState.Lost) ChangeState(FishState.Roaming);
+        if (currentState == FishState.Lost)
+            ChangeState(FishState.Roaming);
     }
 
-    private void ChangeState(FishState newState) => currentState = newState;
+    private void ChangeState(FishState newState)
+    {
+        currentState = newState;
+    }
 }
