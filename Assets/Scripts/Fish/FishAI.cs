@@ -42,6 +42,7 @@ public class FishAI : MonoBehaviour
     [SerializeField, Range(0f, 1f)] private float biteChance = 0.7f;
     [SerializeField, Range(0f, 1f)] private float hookChance = 0.85f;
     [SerializeField, Min(0f)] private float baitCooldown = 8f;
+    [SerializeField, Min(0.1f)] private float feedingDistanceMultiplier = 1.5f;
 
     [Header("Reaction")]
     [SerializeField, Min(0.1f)] private float fearDistance = 2f;
@@ -133,12 +134,19 @@ public class FishAI : MonoBehaviour
             return;
         }
 
-        float approachSpeed = GetSwimmingSpeed() * Mathf.Lerp(1f, 0.45f, Caution);
-        SwimTowards(baitTarget.position, approachSpeed);
+        // Stop approaching once the fish reaches the inspection zone.
+        // The previous implementation kept moving forward even when it was already
+        // almost on top of the sinker, which caused the visible shaking/oscillation.
+        if (distance > investigateDistance)
+        {
+            float approachSpeed = GetSwimmingSpeed() * Mathf.Lerp(1f, 0.45f, Caution);
+            SwimTowards(baitTarget.position, approachSpeed);
+            return;
+        }
 
-        if (distance > investigateDistance) return;
-
+        FaceTarget(baitTarget.position);
         inspectTimer += Time.deltaTime;
+
         float requiredInspection = Mathf.Lerp(inspectTimeMin, inspectTimeMax, Caution);
         if (inspectTimer < requiredInspection) return;
 
@@ -168,16 +176,19 @@ public class FishAI : MonoBehaviour
         }
 
         float distance = Vector3.Distance(transform.position, baitTarget.position);
-        if (distance > investigateDistance * 1.5f)
+        float feedingDistance = investigateDistance * feedingDistanceMultiplier;
+
+        if (distance > feedingDistance)
         {
             LeaveBait();
             return;
         }
 
-        SwimTowards(baitTarget.position, GetSwimmingSpeed() * 0.25f);
-        if (distance > investigateDistance) return;
-
+        // Stay beside the bait while taking it instead of repeatedly trying to move
+        // through the same point. This gives the bite/hook decision a stable position.
+        FaceTarget(baitTarget.position);
         inspectTimer += Time.deltaTime;
+
         float takeTime = Mathf.Lerp(0.35f, 2f, Caution);
         if (inspectTimer < takeTime) return;
 
@@ -195,12 +206,19 @@ public class FishAI : MonoBehaviour
             return;
         }
 
+        // The hook is now confirmed. BeginFight() is responsible for creating the
+        // physical fight connection to the active rig.
         baitTarget = sinker.transform;
         ChangeState(FishState.Hooked);
         fightController.BeginFight();
 
+        // BeginFight() can refuse the fight if the Player or Sinker is not configured.
+        // Never leave the fish stuck in Hooked in that case.
         if (!fightController.IsFighting)
+        {
             ChangeState(FishState.Roaming);
+            nextBaitCheckTime = Time.time + 1f;
+        }
     }
 
     private bool IsBaitValid()
@@ -243,6 +261,15 @@ public class FishAI : MonoBehaviour
         Quaternion desiredRotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
         transform.rotation = Quaternion.Slerp(transform.rotation, desiredRotation, turnSpeed * Time.deltaTime);
         transform.position += transform.forward * speed * Time.deltaTime;
+    }
+
+    private void FaceTarget(Vector3 target)
+    {
+        Vector3 direction = target - transform.position;
+        if (direction.sqrMagnitude < 0.0001f) return;
+
+        Quaternion desiredRotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
+        transform.rotation = Quaternion.Slerp(transform.rotation, desiredRotation, turnSpeed * 2f * Time.deltaTime);
     }
 
     private float GetSwimmingSpeed()
