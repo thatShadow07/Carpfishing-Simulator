@@ -62,17 +62,6 @@ public class Sinker : MonoBehaviour
         if (rb == null)
             return;
 
-        // The rig is visually and physically carried by the hooked fish.
-        // FishingLine targets the fish directly during a fight, so this object
-        // must only follow it and must not run its own bottom physics.
-        if (AttachedFish != null)
-        {
-            rb.isKinematic = true;
-            rb.position = AttachedFish.position;
-            rb.rotation = AttachedFish.rotation;
-            return;
-        }
-
         if (!IsInWater)
         {
             WaterDepth detectedWater = FindWaterAtPosition();
@@ -185,21 +174,8 @@ public class Sinker : MonoBehaviour
         rb.isKinematic = true;
     }
 
-    public void AttachFish(Transform fish)
-    {
-        AttachedFish = fish;
-        IsOnBottom = false;
-    }
-
-    public void DetachFish()
-    {
-        AttachedFish = null;
-        if (rb != null && IsInWater)
-        {
-            rb.isKinematic = false;
-            rb.useGravity = false;
-        }
-    }
+    public void AttachFish(Transform fish) => AttachedFish = fish;
+    public void DetachFish() => AttachedFish = null;
     public Transform GetAttachedFish() => AttachedFish;
 
     public void MoveRig(Vector3 delta)
