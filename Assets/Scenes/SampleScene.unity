@@ -336,8 +336,8 @@ GameObject:
   - component: {fileID: 219401223}
   - component: {fileID: 219401222}
   - component: {fileID: 219401226}
-  - component: {fileID: 219401228}
   - component: {fileID: 219401227}
+  - component: {fileID: 219401228}
   m_Layer: 0
   m_Name: Carp
   m_TagString: Untagged
@@ -458,30 +458,26 @@ MonoBehaviour:
   lineBreakingStrain: 6
   dragSetting: 0.45
   reelSpeed: 2
-  fishFollowSpeed: 1.2
-  maximumRigDistance: 3
   minimumLandingDistance: 2
   maximumFishDistance: 30
-  baseLineTension: 0.4
-  reelTensionPerSecond: 1.2
-  tensionReleasePerSecond: 1.8
-  slackLossThreshold: 0.08
-  maximumSafeTension: 0.85
+  baseRunSpeed: 2.5
+  burstSpeed: 4
   burstDurationMin: 1.2
   burstDurationMax: 3
   burstCooldownMin: 3
   burstCooldownMax: 8
-  burstSpeed: 4
-  burstSpeedVariation: 0.2
+  burstChance: 0.5
   staminaDrainPerSecond: 10
-  staminaRecoveryPerSecond: 4
-  exhaustedThreshold: 0.1
   tiredThreshold: 0.3
-  obstacleFallbackChance: 0.25
-  obstacleCheckDistance: 6
+  exhaustedThreshold: 0.1
+  directionChangeChance: 0.4
+  obstacleSeeking: 0.3
+  directionChangeIntervalMin: 1
+  directionChangeIntervalMax: 3
   obstacleMask:
     serializedVersion: 2
     m_Bits: 0
+  obstacleCheckDistance: 6
 --- !u!114 &219401227
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -511,9 +507,10 @@ MonoBehaviour:
   inspectTimeMin: 1
   inspectTimeMax: 4
   biteChance: 0.7
-  hookChance: 0.85
   baitCooldown: 6
-  fearDistance: 2
+  feedingDistance: 1.25
+  takeTimeMin: 0.6
+  takeTimeMax: 1.8
   escapeDistance: 8
   randomBehaviour: 0.15
 --- !u!54 &219401228
@@ -542,7 +539,7 @@ Rigidbody:
   m_IsKinematic: 0
   m_Interpolate: 0
   m_Constraints: 0
-  m_CollisionDetection: 0
+  m_CollisionDetection: 3
 --- !u!1 &240365734
 GameObject:
   m_ObjectHideFlags: 0
@@ -893,6 +890,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FishingLine
   lineStart: {fileID: 2019995295}
+  slackLength: 0.5
+  breakingStrain: 6
+  stretchResponse: 8
+  movementTension: 0.35
 --- !u!114 &687003313
 MonoBehaviour:
   m_ObjectHideFlags: 0
