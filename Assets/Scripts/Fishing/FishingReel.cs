@@ -1,8 +1,10 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-// Recolhe o rig lançado até à ponta da cana. Se o rig estiver ligado a uma
-// carpa, a carpa acompanha o movimento do rig através da ligação do Sinker.
+// Recolhe o rig lançado até à ponta da cana. Se houver uma carpa presa (em
+// combate), é o FishFightController que assume TODO o controlo do rig - o
+// FishingReel não lhe toca enquanto isso durar, para não haver dois sistemas
+// a mover a mesma coisa ao mesmo tempo.
 public class FishingReel : MonoBehaviour
 {
     [Header("Referências")]
@@ -24,6 +26,13 @@ public class FishingReel : MonoBehaviour
     private void Update()
     {
         if (currentSinker == null || castOrigin == null) return;
+
+        Sinker sinker = currentSinker.GetComponent<Sinker>();
+
+        // Enquanto houver uma carpa presa, é o FishFightController que manda
+        // no rig - ele já trata da resistência, arrancadas e tensão.
+        if (sinker != null && sinker.GetAttachedFish() != null) return;
+
         if (Keyboard.current == null || !Keyboard.current.rKey.isPressed) return;
 
         currentSinker.isKinematic = true;
@@ -44,15 +53,7 @@ public class FishingReel : MonoBehaviour
             desiredPoint,
             reelSpeed * Time.deltaTime);
 
-        Vector3 delta = newPosition - current;
         currentSinker.MovePosition(newPosition);
-
-        // Se houver uma carpa presa ao rig, ela é puxada juntamente com ele.
-        Sinker sinker = currentSinker.GetComponent<Sinker>();
-        if (sinker != null && delta.sqrMagnitude > 0.000001f)
-        {
-            sinker.MoveWithFish(delta);
-        }
 
         if (Vector3.Distance(newPosition, target) <= catchDistance)
         {

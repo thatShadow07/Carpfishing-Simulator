@@ -486,12 +486,29 @@ MonoBehaviour:
   playerTransform: {fileID: 1003823629}
   fishingLine: {fileID: 687003312}
   minimumDistance: 1.5
-  recoverySpeed: 0.8
-  burstDuration: 2.5
-  burstCooldown: 3.5
+  reelSpeed: 2
+  fishResistanceSpeed: 0.8
+  maxRigFishDistance: 2
+  burstDurationMin: 1.2
+  burstDurationMax: 3
+  burstCooldownMin: 3
+  burstCooldownMax: 8
   burstSpeed: 4
+  burstSpeedVariance: 0.2
+  burstTriggerChancePerSecond: 0.5
+  minStaminaPercentForBurst: 0.6
   staminaDrainPerSecond: 10
   staminaRecoveryPerSecond: 4
+  exhaustedRecoveryDelay: 3
+  resistanceStrength: 0.7
+  reelingRecoveryMultiplier: 0.1
+  overallFatigueGainPerStaminaPoint: 0.006
+  maxOverallFatigue: 0.85
+  overallFatigueStaminaCeilingImpact: 0.7
+  overallFatigueRecoveryPenalty: 0.6
+  overallFatigueBurstPenalty: 0.5
+  secondWindDistance: 4
+  secondWindChanceBoost: 1
 --- !u!1 &240365734
 GameObject:
   m_ObjectHideFlags: 0
@@ -856,7 +873,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::FishingReel
   castingSystem: {fileID: 687003310}
   castOrigin: {fileID: 2019995295}
-  reelSpeed: 4
+  reelSpeed: 6
   catchDistance: 0.3
   liftDistance: 2
 --- !u!1 &1003823628
