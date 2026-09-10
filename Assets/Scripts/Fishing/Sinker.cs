@@ -1,23 +1,40 @@
 using UnityEngine;
 
-// Representa o chumbo/rig lançado. Durante o combate pode ficar ligado à
-// carpa para que chumbo, linha e peixe formem o mesmo conjunto.
+// Physical anchor of the bottom-fishing rig.
+// The sinker is the object the line connects to. When a fish is hooked,
+// the fish is connected to this rig instead of being teleported to it.
 public class Sinker : MonoBehaviour
 {
     public static Sinker Current { get; private set; }
-    public bool IsInWater { get; private set; }
 
+    [Header("Physics")]
     [SerializeField] private Rigidbody rb;
-    [SerializeField] private float sinkSpeed = 1.5f;
+    [SerializeField, Min(0.01f)] private float massKg = 0.09f;
+    [SerializeField, Min(0f)] private float sinkSpeed = 1.5f;
 
-    private bool hasLanded;
-    private bool isSinking;
+    [Header("Rig")]
+    [SerializeField, Min(0.01f)] private float rigLength = 0.35f;
+
+    public bool IsInWater { get; private set; }
+    public bool IsOnBottom { get; private set; }
+    public Rigidbody Rigidbody => rb;
+    public float MassKg => massKg;
+    public float RigLength => rigLength;
+    public Transform AttachedFish { get; private set; }
+
+    private WaterDepth currentWater;
     private float targetBottomY;
-    private Transform attachedFish;
+    private bool hasLanded;
 
     private void Awake()
     {
         if (rb == null) rb = GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.mass = massKg;
+            rb.useGravity = true;
+            rb.isKinematic = false;
+        }
     }
 
     private void OnEnable() => Current = this;
@@ -29,57 +46,97 @@ public class Sinker : MonoBehaviour
 
     private void OnCollisionEnter(Collision collision)
     {
-        if (hasLanded) return;
-        hasLanded = true;
+        if (collision.gameObject.CompareTag("Water"))
+        {
+            EnterWater(collision.gameObject);
+            return;
+        }
 
-        if (collision.gameObject.CompareTag("Water")) LandInWater(collision.gameObject);
-        else LandOnGround(collision);
+        if (IsInWater)
+        {
+            WaterDepth depth = currentWater != null ? currentWater : collision.gameObject.GetComponent<WaterDepth>();
+            if (depth != null)
+            {
+                targetBottomY = depth.GetBottomHeightAt(transform.position);
+                if (transform.position.y <= targetBottomY + 0.15f)
+                    SetOnBottom();
+            }
+        }
     }
 
-    private void LandInWater(GameObject waterObject)
+    private void EnterWater(GameObject waterObject)
     {
-        rb.linearVelocity = Vector3.zero;
-        rb.isKinematic = true;
         IsInWater = true;
+        currentWater = waterObject.GetComponent<WaterDepth>();
 
-        WaterDepth waterDepth = waterObject.GetComponent<WaterDepth>();
-        if (waterDepth != null)
+        if (currentWater != null)
+            targetBottomY = currentWater.GetBottomHeightAt(transform.position);
+
+        hasLanded = true;
+        IsOnBottom = false;
+
+        // The cast has finished. Let gravity and the controlled sinking phase
+        // place the lead on the lakebed.
+        if (rb != null)
         {
-            float depth = waterDepth.GetDepthAt(transform.position);
-            targetBottomY = waterDepth.GetBottomHeightAt(transform.position);
-            isSinking = true;
-            Debug.Log($"Rig entrou na água. Profundidade neste ponto: {depth:F1} m.");
+            rb.linearVelocity = Vector3.zero;
+            rb.isKinematic = false;
+            rb.useGravity = true;
         }
-        else
-        {
-            Debug.Log("Rig entrou na água, mas este objeto ainda não tem WaterDepth.");
-        }
+
+        Debug.Log("Rig entrou na água.");
     }
 
-    private void Update()
+    private void FixedUpdate()
     {
-        if (!isSinking) return;
+        if (!IsInWater || IsOnBottom || currentWater == null) return;
 
-        Vector3 position = transform.position;
-        if (position.y > targetBottomY)
-        {
-            position.y = Mathf.MoveTowards(position.y, targetBottomY, sinkSpeed * Time.deltaTime);
-            transform.position = position;
-        }
-        else isSinking = false;
+        float bottom = currentWater.GetBottomHeightAt(transform.position);
+        targetBottomY = bottom;
+
+        // Keep the simple prototype stable: gravity does the main work, while
+        // the controlled vertical clamp prevents the lead falling through the bed.
+        if (transform.position.y <= targetBottomY + 0.05f)
+            SetOnBottom();
     }
 
-    private void LandOnGround(Collision collision)
+    private void SetOnBottom()
     {
-        Debug.Log($"O lançamento caiu em terra ({collision.gameObject.name}), não na água.");
+        IsOnBottom = true;
+        Vector3 p = transform.position;
+        p.y = targetBottomY;
+        transform.position = p;
+
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.isKinematic = true;
+        }
     }
 
-    public void AttachFish(Transform fish) => attachedFish = fish;
-    public void DetachFish() => attachedFish = null;
-    public Transform GetAttachedFish() => attachedFish;
+    public void AttachFish(Transform fish)
+    {
+        AttachedFish = fish;
+    }
+
+    public void DetachFish()
+    {
+        AttachedFish = null;
+    }
+
+    public Transform GetAttachedFish() => AttachedFish;
+
+    // Used by the fight system to move the complete rig without destroying
+    // the fish-to-rig relationship.
+    public void MoveRig(Vector3 delta)
+    {
+        transform.position += delta;
+    }
 
     public void MoveWithFish(Vector3 delta)
     {
-        if (attachedFish != null) attachedFish.position += delta;
+        // Kept for compatibility with the previous fight controller.
+        // The new fight system should move the fish through line tension.
     }
 }
