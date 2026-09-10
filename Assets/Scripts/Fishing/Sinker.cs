@@ -159,9 +159,14 @@ public class Sinker : MonoBehaviour
         if (!IsInWater || currentWater == null)
             return;
 
-        targetBottomY = currentWater.GetBottomHeightAt(transform.position);
-        if (transform.position.y <= targetBottomY + bottomStopDistance)
+        // Collider contact happens while the object's centre is still above the
+        // terrain, so checking only its Y position lets the lead slide downhill.
+        ContactPoint contact = collision.contactCount > 0 ? collision.GetContact(0) : default;
+        if (collision.contactCount > 0 && contact.normal.y > 0.2f)
+        {
+            targetBottomY = currentWater.GetBottomHeightAt(transform.position);
             SetOnBottom();
+        }
     }
 
     private void EnterWater(WaterDepth depth)
