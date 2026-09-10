@@ -11,7 +11,6 @@ public class Sinker : MonoBehaviour
     [SerializeField, Min(0f)] private float waterDrag = 0.35f;
 
     [Header("Water Detection")]
-    [SerializeField] private float waterSurfaceOffset = 0f;
     [SerializeField] private float bottomStopDistance = 0.03f;
 
     [Header("Rig")]
