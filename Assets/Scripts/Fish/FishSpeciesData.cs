@@ -8,7 +8,7 @@ public class FishSpeciesData : ScriptableObject
 
     [Header("Physical")]
     [SerializeField, Min(0.1f)] private float weightKg = 8f;
-    [SerializeField, Min(0.1f)] private float strength = 1f;
+    [SerializeField, Min(0.1f)] private float bodyStrength = 1f;
     [SerializeField, Min(0.1f)] private float swimmingSpeed = 1.5f;
     [SerializeField, Min(0.1f)] private float burstSpeed = 5f;
 
@@ -17,17 +17,24 @@ public class FishSpeciesData : ScriptableObject
     [SerializeField, Min(0f)] private float staminaDrainMultiplier = 1f;
     [SerializeField, Min(0f)] private float staminaRecoveryMultiplier = 1f;
 
-    [Header("Personality")]
+    [Header("Behaviour")]
     [SerializeField, Range(0f, 1f)] private float caution = 0.5f;
     [SerializeField, Range(0f, 1f)] private float aggression = 0.5f;
     [SerializeField, Range(0f, 1f)] private float intelligence = 0.5f;
     [SerializeField, Range(0f, 1f)] private float obstacleSeeking = 0.3f;
     [SerializeField, Range(0f, 1f)] private float marginResistance = 0.5f;
     [SerializeField, Range(0f, 1f)] private float burstChance = 0.5f;
+    [SerializeField, Range(0f, 1f)] private float baitConfidence = 0.5f;
+
+    [Header("Fight Behaviour")]
+    [SerializeField, Range(0f, 1f)] private float headShakeChance = 0.35f;
+    [SerializeField, Range(0f, 1f)] private float directionChangeChance = 0.4f;
+    [SerializeField, Range(0f, 1f)] private float deepRunChance = 0.5f;
+    [SerializeField, Min(0.1f)] private float fightAggressionMultiplier = 1f;
 
     public string SpeciesName => speciesName;
     public float WeightKg => weightKg;
-    public float Strength => strength;
+    public float Strength => bodyStrength;
     public float SwimmingSpeed => swimmingSpeed;
     public float BurstSpeed => burstSpeed;
     public float MaxStamina => maxStamina;
@@ -39,4 +46,9 @@ public class FishSpeciesData : ScriptableObject
     public float ObstacleSeeking => obstacleSeeking;
     public float MarginResistance => marginResistance;
     public float BurstChance => burstChance;
+    public float BaitConfidence => baitConfidence;
+    public float HeadShakeChance => headShakeChance;
+    public float DirectionChangeChance => directionChangeChance;
+    public float DeepRunChance => deepRunChance;
+    public float FightAggressionMultiplier => fightAggressionMultiplier;
 }
