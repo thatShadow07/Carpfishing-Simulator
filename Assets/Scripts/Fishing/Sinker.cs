@@ -80,7 +80,16 @@ public class Sinker : MonoBehaviour
                 EnterWater(detectedWater);
         }
 
-        if (!IsInWater || currentWater == null || IsOnBottom)
+        if (IsOnBottom)
+        {
+            // A settled lead must not be displaced by fish colliders or slope
+            // jitter. AttachFish releases this lock only after a real hookup.
+            rb.useGravity = false;
+            rb.isKinematic = true;
+            return;
+        }
+
+        if (!IsInWater || currentWater == null)
         {
             rb.useGravity = true;
             return;
@@ -183,12 +192,15 @@ public class Sinker : MonoBehaviour
         rb.angularVelocity = Vector3.zero;
         rb.useGravity = false;
         rb.isKinematic = true;
+        rb.constraints = RigidbodyConstraints.FreezeAll;
     }
 
     public void AttachFish(Transform fish)
     {
         AttachedFish = fish;
         IsOnBottom = false;
+        if (rb != null)
+            rb.constraints = RigidbodyConstraints.None;
     }
 
     public void DetachFish()
@@ -198,6 +210,7 @@ public class Sinker : MonoBehaviour
         {
             rb.isKinematic = false;
             rb.useGravity = false;
+            rb.constraints = RigidbodyConstraints.None;
         }
     }
     public Transform GetAttachedFish() => AttachedFish;
