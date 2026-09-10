@@ -60,7 +60,8 @@ public class FishingLine : MonoBehaviour
         float radialSpeed = Time.fixedDeltaTime > 0f
             ? (distance - previousDistance) / Time.fixedDeltaTime
             : 0f;
-        float targetTension = extension * jointSpring + Mathf.Max(0f, radialSpeed) * 0.1f;
+        float effectiveSpring = Mathf.Max(20f, jointSpring);
+        float targetTension = extension * effectiveSpring + Mathf.Max(0f, radialSpeed) * 0.1f;
         previousDistance = distance;
 
         tension = Mathf.MoveTowards(tension, targetTension, tensionSmoothing * Time.fixedDeltaTime);
@@ -170,8 +171,11 @@ public class FishingLine : MonoBehaviour
         physicalJoint.linearLimit = limit;
 
         SoftJointLimitSpring spring = physicalJoint.linearLimitSpring;
-        spring.spring = jointSpring;
-        spring.damper = jointDamper;
+        // Existing Unity scenes may have serialized the old zero spring value.
+        // Keep a minimum so the rig is physically supported even before the
+        // Inspector is re-saved.
+        spring.spring = Mathf.Max(20f, jointSpring);
+        spring.damper = Mathf.Max(1f, jointDamper);
         physicalJoint.linearLimitSpring = spring;
 
         physicalJoint.angularXMotion = ConfigurableJointMotion.Free;
