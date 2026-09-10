@@ -11,7 +11,7 @@ public class Sinker : MonoBehaviour
     [SerializeField, Min(0f)] private float waterDrag = 0.35f;
 
     [Header("Water Detection")]
-    [SerializeField] private float bottomStopDistance = 0.03f;
+    [SerializeField, Min(0f)] private float bottomStopDistance = 0.03f;
 
     [Header("Rig")]
     [SerializeField, Min(0.01f)] private float rigLength = 0.35f;
@@ -26,18 +26,20 @@ public class Sinker : MonoBehaviour
 
     private WaterDepth currentWater;
     private float targetBottomY;
+    private Collider sinkerCollider;
 
     private void Awake()
     {
         if (rb == null) rb = GetComponent<Rigidbody>();
+        sinkerCollider = GetComponent<Collider>();
 
         if (rb != null)
         {
             rb.mass = massKg;
-            rb.useGravity = false;
+            rb.useGravity = true;
             rb.isKinematic = false;
-            rb.linearDamping = waterDrag;
-            rb.angularDamping = waterDrag;
+            rb.linearDamping = 0f;
+            rb.angularDamping = 0.05f;
         }
     }
 
@@ -57,16 +59,21 @@ public class Sinker : MonoBehaviour
     {
         WaterDepth depth = other.GetComponent<WaterDepth>();
         if (depth == null) depth = other.GetComponentInParent<WaterDepth>();
-        if (depth != null) EnterWater(depth);
+        if (depth != null) EnterWater(depth, other);
     }
 
     private void OnCollisionEnter(Collision collision)
     {
         WaterDepth depth = collision.gameObject.GetComponent<WaterDepth>();
         if (depth == null) depth = collision.gameObject.GetComponentInParent<WaterDepth>();
+
         if (depth != null)
         {
-            EnterWater(depth);
+            // Water must not act as a solid surface.
+            if (sinkerCollider != null && collision.collider != null)
+                Physics.IgnoreCollision(sinkerCollider, collision.collider, true);
+
+            EnterWater(depth, collision.collider);
             return;
         }
 
@@ -77,21 +84,25 @@ public class Sinker : MonoBehaviour
             SetOnBottom();
     }
 
-    private void EnterWater(WaterDepth depth)
+    private void EnterWater(WaterDepth depth, Collider waterCollider)
     {
-        if (depth == null) return;
+        if (depth == null || IsOnBottom) return;
 
         currentWater = depth;
         IsInWater = true;
         IsOnBottom = false;
         targetBottomY = currentWater.GetBottomHeightAt(transform.position);
 
+        if (sinkerCollider != null && waterCollider != null)
+            Physics.IgnoreCollision(sinkerCollider, waterCollider, true);
+
         if (rb != null)
         {
             rb.isKinematic = false;
             rb.useGravity = false;
-            rb.linearVelocity = Vector3.zero;
-            rb.angularVelocity = Vector3.zero;
+            rb.linearDamping = waterDrag;
+            rb.angularDamping = waterDrag;
+            rb.linearVelocity = new Vector3(rb.linearVelocity.x, Mathf.Min(rb.linearVelocity.y, 0f), rb.linearVelocity.z);
         }
 
         Debug.Log("Rig entrou na água.");
@@ -99,9 +110,20 @@ public class Sinker : MonoBehaviour
 
     private void FixedUpdate()
     {
-        if (!IsInWater || IsOnBottom || currentWater == null || rb == null)
-            return;
+        if (rb == null) return;
 
+        if (!IsInWater)
+        {
+            // Normal gravity before reaching the water.
+            rb.useGravity = true;
+            rb.linearDamping = 0f;
+            return;
+        }
+
+        if (IsOnBottom || currentWater == null) return;
+
+        rb.useGravity = false;
+        rb.linearDamping = waterDrag;
         targetBottomY = currentWater.GetBottomHeightAt(transform.position);
 
         if (transform.position.y <= targetBottomY + bottomStopDistance)
@@ -110,7 +132,7 @@ public class Sinker : MonoBehaviour
             return;
         }
 
-        // Simula o peso afundando na água sem deixar o chumbo boiar.
+        // Downward acceleration represents the lead's effective weight in water.
         rb.AddForce(Vector3.down * sinkAcceleration, ForceMode.Acceleration);
     }
 
