@@ -37,6 +37,11 @@ public class FishingReel : MonoBehaviour
 
         if (Keyboard.current.rKey.isPressed)
         {
+            // A lead on the lake bed is deliberately locked until the player
+            // chooses to retrieve it.
+            if (sinker != null)
+                sinker.BeginRetrieval();
+
             Vector3 offset = castOrigin.position - currentSinker.position;
             if (offset.sqrMagnitude > 0.0001f)
             {
