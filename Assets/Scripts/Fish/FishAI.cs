@@ -1,10 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Comportamento básico da carpa. Nada em 3D dentro de uma área fixa do
-/// lago, deteta o isco, investiga-o e pode alimentar-se dele.
-/// A ferragem é determinada pela interação peixe + montagem, não pelo F.
-/// O F representa a reação do pescador ao alarme.
+/// AI de uma carpa: patrulha, deteta o rig, aproxima-se de forma cautelosa,
+/// investiga o isco e tenta alimentar-se. A luta é delegada ao FishFightController.
 /// </summary>
 [RequireComponent(typeof(FishFightController))]
 public class FishAI : MonoBehaviour
@@ -12,49 +10,59 @@ public class FishAI : MonoBehaviour
     public enum FishState
     {
         Roaming,
-        Exploring,
-        Feeding,
         InvestigatingBait,
-        TakingBait,
+        Feeding,
         Hooked,
         Fighting,
-        Landing
+        Tired,
+        Landing,
+        Lost,
+        Landed
     }
+
+    [Header("Fish Profile")]
+    [SerializeField] private FishSpeciesData speciesData;
 
     [Header("State")]
     [SerializeField] private FishState currentState = FishState.Roaming;
 
     [Header("Movement")]
-    [SerializeField] private float moveSpeed = 1.5f;
-    [SerializeField] private float turnSpeed = 3f;
-    [SerializeField] private float destinationReachedDistance = 0.5f;
+    [SerializeField, Min(0.1f)] private float moveSpeed = 1.5f;
+    [SerializeField, Min(0.1f)] private float turnSpeed = 3f;
+    [SerializeField, Min(0.1f)] private float destinationReachedDistance = 0.5f;
 
     [Header("Swim Area")]
     [SerializeField] private Vector3 lakeCenter;
-    [SerializeField] private float swimRadius = 20f;
+    [SerializeField, Min(1f)] private float swimRadius = 20f;
     [SerializeField] private WaterDepth waterDepth;
     [SerializeField] private float surfaceMargin = 0.5f;
     [SerializeField] private float bottomMargin = 0.5f;
 
-    [Header("Bait Detection")]
-    [SerializeField] private float detectionRadius = 4f;
-    [SerializeField] private float biteDistance = 0.5f;
-    [SerializeField] private float investigateDuration = 2f;
-    [SerializeField, Range(0f, 1f)] private float biteChance = 0.7f;
-    [SerializeField] private float baitCooldown = 6f;
+    [Header("Bait Behaviour")]
+    [SerializeField, Min(0.1f)] private float detectionRadius = 4f;
+    [SerializeField, Min(0.1f)] private float investigateDistance = 0.6f;
+    [SerializeField, Min(0.1f)] private float inspectDuration = 2.5f;
+    [SerializeField, Range(0f, 1f)] private float baseBiteChance = 0.7f;
+    [SerializeField, Range(0f, 1f)] private float baseHookChance = 0.85f;
+    [SerializeField, Min(0f)] private float baitCooldown = 8f;
 
-    [Header("Hooking")]
-    [SerializeField, Range(0f, 1f)] private float hookChance = 0.85f;
-    [SerializeField] private float hookDelay = 0.75f;
-    [SerializeField] private float alarmReactionWindow = 2f;
+    [Header("Behaviour Variation")]
+    [SerializeField, Min(0.1f)] private float destinationChangeMin = 3f;
+    [SerializeField, Min(0.1f)] private float destinationChangeMax = 8f;
+    [SerializeField, Range(0f, 1f)] private float randomInterestVariation = 0.15f;
 
-    private Vector3 targetPosition;
-    private Transform baitTarget;
-    private float investigateTimer;
-    private float hookTimer;
-    private float nextBaitCheckTime;
-    private bool hookSet;
     private FishFightController fightController;
+    private Transform baitTarget;
+    private Vector3 targetPosition;
+    private float inspectTimer;
+    private float nextBaitCheckTime;
+    private float destinationTimer;
+
+    public FishState CurrentState => currentState;
+    public FishSpeciesData SpeciesData => speciesData;
+    public float Caution => speciesData != null ? speciesData.Caution : 0.5f;
+    public float Aggression => speciesData != null ? speciesData.Aggression : 0.5f;
+    public float Intelligence => speciesData != null ? speciesData.Intelligence : 0.5f;
 
     private void Awake()
     {
@@ -64,198 +72,241 @@ public class FishAI : MonoBehaviour
     private void Start()
     {
         ChooseNewDestination();
+        ChangeState(FishState.Roaming);
     }
 
     private void Update()
     {
+        if (fightController != null && fightController.IsFighting)
+            return;
+
         switch (currentState)
         {
             case FishState.Roaming:
-            case FishState.Exploring:
-                SwimTowardsTarget();
-                CheckForBait();
+                UpdateRoaming();
                 break;
 
             case FishState.InvestigatingBait:
-                SwimTowardsBait();
-                break;
-
-            case FishState.TakingBait:
-                HandleTakingBait();
-                break;
-
-            case FishState.Hooked:
-                HandleHooked();
+                UpdateInvestigation();
                 break;
 
             case FishState.Feeding:
-            case FishState.Fighting:
-            case FishState.Landing:
+                UpdateFeeding();
                 break;
+        }
+    }
+
+    private void UpdateRoaming()
+    {
+        SwimTowards(targetPosition, GetMovementSpeed());
+        destinationTimer -= Time.deltaTime;
+
+        CheckForBait();
+
+        if (destinationTimer <= 0f ||
+            Vector3.Distance(transform.position, targetPosition) <= destinationReachedDistance)
+        {
+            ChooseNewDestination();
         }
     }
 
     private void CheckForBait()
     {
-        if (Time.time < nextBaitCheckTime) return;
-        if (Sinker.Current == null || !Sinker.Current.IsInWater) return;
+        if (Time.time < nextBaitCheckTime)
+            return;
+
+        if (Sinker.Current == null || !Sinker.Current.IsInWater)
+            return;
+
+        if (fightController != null && fightController.IsFighting)
+            return;
 
         float distance = Vector3.Distance(transform.position, Sinker.Current.transform.position);
+        if (distance > detectionRadius)
+            return;
 
-        if (distance <= detectionRadius)
-        {
-            baitTarget = Sinker.Current.transform;
-            currentState = FishState.InvestigatingBait;
-        }
+        baitTarget = Sinker.Current.transform;
+        inspectTimer = 0f;
+        ChangeState(FishState.InvestigatingBait);
     }
 
-    private void SwimTowardsBait()
+    private void UpdateInvestigation()
     {
         if (baitTarget == null)
         {
-            ReturnToRoaming();
+            LeaveBait();
             return;
         }
 
-        Vector3 direction = baitTarget.position - transform.position;
+        float distance = Vector3.Distance(transform.position, baitTarget.position);
 
-        if (direction.magnitude <= biteDistance)
+        if (distance > investigateDistance)
         {
-            currentState = FishState.TakingBait;
-            investigateTimer = 0f;
+            float cautiousSpeed = Mathf.Lerp(GetMovementSpeed(), GetMovementSpeed() * 0.35f, Caution);
+            SwimTowards(baitTarget.position, cautiousSpeed);
             return;
         }
 
-        MoveAndTurn(direction);
-    }
+        inspectTimer += Time.deltaTime;
 
-    private void HandleTakingBait()
-    {
-        if (baitTarget == null)
-        {
-            ReturnToRoaming();
+        // Um peixe cauteloso demora mais a decidir.
+        float requiredInspection = Mathf.Lerp(
+            inspectDuration * 0.6f,
+            inspectDuration * 1.8f,
+            Caution
+        );
+
+        if (inspectTimer < requiredInspection)
             return;
-        }
 
-        investigateTimer += Time.deltaTime;
+        float biteChance = Mathf.Clamp01(
+            baseBiteChance
+            + (Aggression - 0.5f) * 0.2f
+            - Caution * 0.2f
+            + Random.Range(-randomInterestVariation, randomInterestVariation)
+        );
 
-        if (investigateTimer < investigateDuration) return;
-
-        if (Random.value > biteChance)
+        if (Random.value <= biteChance)
         {
-            Debug.Log("A carpa investigou o isco, mas não o comeu.");
-            nextBaitCheckTime = Time.time + baitCooldown;
-            ReturnToRoaming();
-            return;
-        }
-
-        hookSet = Random.value <= hookChance;
-        hookTimer = 0f;
-
-        if (hookSet)
-        {
-            Debug.Log("🐟 A carpa comeu o isco — o anzol começou a cravar.");
-            currentState = FishState.Hooked;
+            ChangeState(FishState.Feeding);
         }
         else
         {
-            Debug.Log("🐟 A carpa comeu o isco, mas o anzol não ficou cravado.");
-            nextBaitCheckTime = Time.time + baitCooldown;
-            ReturnToRoaming();
+            LeaveBait();
         }
     }
 
-    private void HandleHooked()
+    private void UpdateFeeding()
     {
-        hookTimer += Time.deltaTime;
-
-        if (hookTimer >= hookDelay && hookTimer < hookDelay + Time.deltaTime)
+        if (baitTarget == null || Sinker.Current == null || !Sinker.Current.IsInWater)
         {
-            Debug.Log("🔔 BITE ALARM! A carpa está presa — reage e pega na cana!");
-        }
-
-        if (hookTimer >= alarmReactionWindow)
-        {
-            BeginFighting("🐟 A carpa continua a puxar — combate começa mesmo sem reação imediata.");
+            LeaveBait();
             return;
         }
 
-        if (UnityEngine.InputSystem.Keyboard.current != null &&
-            UnityEngine.InputSystem.Keyboard.current.fKey.wasPressedThisFrame &&
-            hookTimer >= hookDelay)
+        float distance = Vector3.Distance(transform.position, baitTarget.position);
+        if (distance > investigateDistance * 1.5f)
         {
-            BeginFighting("🎣 Pegaste na cana! A carpa está presa e começa o combate.");
-        }
-    }
-
-    private void BeginFighting(string message)
-    {
-        Debug.Log(message);
-        currentState = FishState.Fighting;
-        fightController.BeginFight();
-    }
-
-    private void SwimTowardsTarget()
-    {
-        Vector3 direction = targetPosition - transform.position;
-
-        if (direction.sqrMagnitude <= destinationReachedDistance * destinationReachedDistance)
-        {
-            ChooseNewDestination();
+            LeaveBait();
             return;
         }
 
-        MoveAndTurn(direction);
-    }
+        // Pequeno atraso irregular para evitar que todas as carpas comam no mesmo instante.
+        inspectTimer += Time.deltaTime;
 
-    private void MoveAndTurn(Vector3 direction)
-    {
-        Vector3 desiredDirection = direction.normalized;
-        Quaternion targetRotation = Quaternion.LookRotation(desiredDirection, Vector3.up);
-        transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, turnSpeed * Time.deltaTime);
-        transform.position += transform.forward * moveSpeed * Time.deltaTime;
+        float takeDelay = Mathf.Lerp(0.4f, 1.8f, Caution);
+        if (inspectTimer < takeDelay)
+            return;
+
+        float hookChance = Mathf.Clamp01(
+            baseHookChance
+            + Aggression * 0.12f
+            - Caution * 0.18f
+        );
+
+        if (Random.value <= hookChance)
+        {
+            baitTarget = Sinker.Current.transform;
+            ChangeState(FishState.Hooked);
+
+            if (fightController != null)
+                fightController.BeginFight();
+        }
+        else
+        {
+            LeaveBait();
+        }
     }
 
     private void ChooseNewDestination()
     {
         Vector2 randomCircle = Random.insideUnitCircle * swimRadius;
+
         float x = lakeCenter.x + randomCircle.x;
         float z = lakeCenter.z + randomCircle.y;
         float y = ChooseDepthAt(x, z);
 
         targetPosition = new Vector3(x, y, z);
+        destinationTimer = Random.Range(
+            destinationChangeMin,
+            Mathf.Max(destinationChangeMin, destinationChangeMax)
+        );
     }
 
     private float ChooseDepthAt(float x, float z)
     {
         if (waterDepth == null)
-        {
             return transform.position.y;
-        }
 
         Vector3 point = new Vector3(x, waterDepth.SurfaceHeight, z);
         float surface = waterDepth.SurfaceHeight - surfaceMargin;
         float bottom = waterDepth.GetBottomHeightAt(point) + bottomMargin;
 
-        if (bottom > surface)
-        {
-            return (surface + bottom) * 0.5f;
-        }
+        if (bottom >= surface)
+            return transform.position.y;
 
+        // Carpas não passam constantemente rente à superfície nem ao fundo.
         return Random.Range(bottom, surface);
     }
 
-    private void ReturnToRoaming()
+    private void SwimTowards(Vector3 destination, float speed)
     {
-        baitTarget = null;
-        hookSet = false;
-        currentState = FishState.Roaming;
-        ChooseNewDestination();
+        Vector3 direction = destination - transform.position;
+
+        if (direction.sqrMagnitude < 0.001f)
+            return;
+
+        Quaternion desiredRotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
+        transform.rotation = Quaternion.Slerp(
+            transform.rotation,
+            desiredRotation,
+            turnSpeed * Time.deltaTime
+        );
+
+        transform.position += transform.forward * speed * Time.deltaTime;
     }
 
-    public FishState GetState() => currentState;
+    private float GetMovementSpeed()
+    {
+        return speciesData != null
+            ? speciesData.SwimmingSpeed
+            : moveSpeed;
+    }
 
-    public void SetState(FishState newState)
+    private void LeaveBait()
+    {
+        baitTarget = null;
+        inspectTimer = 0f;
+        nextBaitCheckTime = Time.time + baitCooldown;
+        ChooseNewDestination();
+        ChangeState(FishState.Roaming);
+    }
+
+    public void OnFightStarted()
+    {
+        ChangeState(FishState.Fighting);
+    }
+
+    public void OnFightTired()
+    {
+        ChangeState(FishState.Tired);
+    }
+
+    public void OnFishLanded()
+    {
+        ChangeState(FishState.Landed);
+    }
+
+    public void OnFishLost()
+    {
+        baitTarget = null;
+        ChooseNewDestination();
+        ChangeState(FishState.Lost);
+        nextBaitCheckTime = Time.time + baitCooldown;
+        ChangeState(FishState.Roaming);
+    }
+
+    private void ChangeState(FishState newState)
     {
         currentState = newState;
     }
