@@ -7,7 +7,12 @@ public class Sinker : MonoBehaviour
     [Header("Physics")]
     [SerializeField] private Rigidbody rb;
     [SerializeField, Min(0.01f)] private float massKg = 0.09f;
-    [SerializeField, Min(0f)] private float sinkSpeed = 1.5f;
+    [SerializeField, Min(0f)] private float sinkAcceleration = 7f;
+    [SerializeField, Min(0f)] private float waterDrag = 0.35f;
+
+    [Header("Water Detection")]
+    [SerializeField] private float waterSurfaceOffset = 0f;
+    [SerializeField] private float bottomStopDistance = 0.03f;
 
     [Header("Rig")]
     [SerializeField, Min(0.01f)] private float rigLength = 0.35f;
@@ -18,6 +23,7 @@ public class Sinker : MonoBehaviour
     public float MassKg => massKg;
     public float RigLength => rigLength;
     public Transform AttachedFish { get; private set; }
+    public WaterDepth CurrentWater => currentWater;
 
     private WaterDepth currentWater;
     private float targetBottomY;
@@ -25,50 +31,68 @@ public class Sinker : MonoBehaviour
     private void Awake()
     {
         if (rb == null) rb = GetComponent<Rigidbody>();
+
         if (rb != null)
         {
             rb.mass = massKg;
-            rb.useGravity = true;
+            rb.useGravity = false;
             rb.isKinematic = false;
+            rb.linearDamping = waterDrag;
+            rb.angularDamping = waterDrag;
         }
     }
 
     private void OnEnable() => Current = this;
+
+    private void OnDisable()
+    {
+        if (Current == this) Current = null;
+    }
 
     private void OnDestroy()
     {
         if (Current == this) Current = null;
     }
 
+    private void OnTriggerEnter(Collider other)
+    {
+        WaterDepth depth = other.GetComponent<WaterDepth>();
+        if (depth == null) depth = other.GetComponentInParent<WaterDepth>();
+        if (depth != null) EnterWater(depth);
+    }
+
     private void OnCollisionEnter(Collision collision)
     {
-        if (collision.gameObject.CompareTag("Water"))
+        WaterDepth depth = collision.gameObject.GetComponent<WaterDepth>();
+        if (depth == null) depth = collision.gameObject.GetComponentInParent<WaterDepth>();
+        if (depth != null)
         {
-            EnterWater(collision.gameObject);
+            EnterWater(depth);
             return;
         }
 
-        if (!IsInWater) return;
-        WaterDepth depth = currentWater != null ? currentWater : collision.gameObject.GetComponent<WaterDepth>();
-        if (depth != null)
-        {
-            targetBottomY = depth.GetBottomHeightAt(transform.position);
-            if (transform.position.y <= targetBottomY + 0.15f) SetOnBottom();
-        }
+        if (!IsInWater || currentWater == null) return;
+
+        targetBottomY = currentWater.GetBottomHeightAt(transform.position);
+        if (transform.position.y <= targetBottomY + bottomStopDistance)
+            SetOnBottom();
     }
 
-    private void EnterWater(GameObject waterObject)
+    private void EnterWater(WaterDepth depth)
     {
+        if (depth == null) return;
+
+        currentWater = depth;
         IsInWater = true;
-        currentWater = waterObject.GetComponent<WaterDepth>();
-        if (currentWater != null) targetBottomY = currentWater.GetBottomHeightAt(transform.position);
         IsOnBottom = false;
+        targetBottomY = currentWater.GetBottomHeightAt(transform.position);
 
         if (rb != null)
         {
-            rb.linearVelocity = Vector3.zero;
             rb.isKinematic = false;
-            rb.useGravity = true;
+            rb.useGravity = false;
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
         }
 
         Debug.Log("Rig entrou na água.");
@@ -76,17 +100,29 @@ public class Sinker : MonoBehaviour
 
     private void FixedUpdate()
     {
-        if (!IsInWater || IsOnBottom || currentWater == null) return;
+        if (!IsInWater || IsOnBottom || currentWater == null || rb == null)
+            return;
+
         targetBottomY = currentWater.GetBottomHeightAt(transform.position);
-        if (transform.position.y <= targetBottomY + 0.05f) SetOnBottom();
+
+        if (transform.position.y <= targetBottomY + bottomStopDistance)
+        {
+            SetOnBottom();
+            return;
+        }
+
+        // Simula o peso afundando na água sem deixar o chumbo boiar.
+        rb.AddForce(Vector3.down * sinkAcceleration, ForceMode.Acceleration);
     }
 
     private void SetOnBottom()
     {
         IsOnBottom = true;
+
         Vector3 p = transform.position;
         p.y = targetBottomY;
         transform.position = p;
+
         if (rb != null)
         {
             rb.linearVelocity = Vector3.zero;
@@ -98,6 +134,14 @@ public class Sinker : MonoBehaviour
     public void AttachFish(Transform fish) => AttachedFish = fish;
     public void DetachFish() => AttachedFish = null;
     public Transform GetAttachedFish() => AttachedFish;
-    public void MoveRig(Vector3 delta) => transform.position += delta;
+
+    public void MoveRig(Vector3 delta)
+    {
+        if (rb != null && !rb.isKinematic)
+            rb.MovePosition(rb.position + delta);
+        else
+            transform.position += delta;
+    }
+
     public void MoveWithFish(Vector3 delta) { }
 }
