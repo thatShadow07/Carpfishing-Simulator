@@ -1,10 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Define a superfície da água e vai buscar a altura real do fundo do lago
-/// abaixo de qualquer ponto, para que zonas diferentes tenham profundidades
-/// diferentes. O Plane da água continua a ser só a superfície - o fundo é
-/// uma geometria separada (na layer "LakeBed") contra a qual fazemos raycast.
+/// Defines the water surface and finds the actual lake-bed height below a point.
+/// The water surface itself is never treated as the bottom.
 /// </summary>
 public class WaterDepth : MonoBehaviour
 {
@@ -13,32 +11,40 @@ public class WaterDepth : MonoBehaviour
 
     [Header("Lake Bottom")]
     [SerializeField] private LayerMask lakeBedLayer;
-    [SerializeField] private float fallbackBottomHeight = -5f; // usado se o raycast não encontrar fundo nenhum
+    [SerializeField] private float fallbackBottomHeight = -5f;
+    [SerializeField] private float raycastDistance = 500f;
 
     public float SurfaceHeight => surfaceHeight;
 
-    /// <summary>
-    /// Altura (Y) do fundo do lago diretamente abaixo de worldPosition.
-    /// </summary>
     public float GetBottomHeightAt(Vector3 worldPosition)
     {
-        Vector3 origin = new Vector3(worldPosition.x, surfaceHeight, worldPosition.z);
+        Vector3 origin = new Vector3(worldPosition.x, surfaceHeight + 0.05f, worldPosition.z);
 
-        if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 100f, lakeBedLayer))
+        if (lakeBedLayer.value != 0)
         {
-            return hit.point.y;
+            if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, raycastDistance, lakeBedLayer, QueryTriggerInteraction.Ignore))
+                return hit.point.y;
+        }
+        else
+        {
+            RaycastHit[] hits = Physics.RaycastAll(origin, Vector3.down, raycastDistance, ~0, QueryTriggerInteraction.Ignore);
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+            foreach (RaycastHit hit in hits)
+            {
+                if (hit.collider == null) continue;
+                if (hit.collider.GetComponentInParent<WaterDepth>() != null) continue;
+                if (hit.collider.CompareTag("Water")) continue;
+                return hit.point.y;
+            }
         }
 
         return fallbackBottomHeight;
     }
 
-    /// <summary>
-    /// Profundidade da água (superfície até ao fundo) num ponto.
-    /// </summary>
     public float GetDepthAt(Vector3 worldPosition)
     {
-        float bottomHeight = GetBottomHeightAt(worldPosition);
-        return Mathf.Max(0f, surfaceHeight - bottomHeight);
+        return Mathf.Max(0f, surfaceHeight - GetBottomHeightAt(worldPosition));
     }
 
     public float GetSubmersionDepth(Vector3 worldPosition)
