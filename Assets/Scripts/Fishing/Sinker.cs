@@ -11,6 +11,7 @@ public class Sinker : MonoBehaviour
     [SerializeField, Min(0f)] private float waterDrag = 0.35f;
 
     [Header("Water Detection")]
+    [SerializeField, Min(0f)] private float surfaceDetectionMargin = 0.15f;
     [SerializeField, Min(0f)] private float bottomStopDistance = 0.03f;
 
     [Header("Rig")]
@@ -25,6 +26,7 @@ public class Sinker : MonoBehaviour
     public WaterDepth CurrentWater => currentWater;
 
     private WaterDepth currentWater;
+    private Collider currentWaterCollider;
     private float targetBottomY;
     private Collider sinkerCollider;
 
@@ -62,6 +64,13 @@ public class Sinker : MonoBehaviour
         if (depth != null) EnterWater(depth, other);
     }
 
+    private void OnTriggerStay(Collider other)
+    {
+        WaterDepth depth = other.GetComponent<WaterDepth>();
+        if (depth == null) depth = other.GetComponentInParent<WaterDepth>();
+        if (depth != null && !IsInWater) EnterWater(depth, other);
+    }
+
     private void OnCollisionEnter(Collision collision)
     {
         WaterDepth depth = collision.gameObject.GetComponent<WaterDepth>();
@@ -69,7 +78,6 @@ public class Sinker : MonoBehaviour
 
         if (depth != null)
         {
-            // Water must not act as a solid surface.
             if (sinkerCollider != null && collision.collider != null)
                 Physics.IgnoreCollision(sinkerCollider, collision.collider, true);
 
@@ -89,12 +97,16 @@ public class Sinker : MonoBehaviour
         if (depth == null || IsOnBottom) return;
 
         currentWater = depth;
+        currentWaterCollider = waterCollider != null ? waterCollider : depth.GetComponent<Collider>();
+        if (currentWaterCollider == null)
+            currentWaterCollider = depth.GetComponentInParent<Collider>();
+
         IsInWater = true;
         IsOnBottom = false;
         targetBottomY = currentWater.GetBottomHeightAt(transform.position);
 
-        if (sinkerCollider != null && waterCollider != null)
-            Physics.IgnoreCollision(sinkerCollider, waterCollider, true);
+        if (sinkerCollider != null && currentWaterCollider != null)
+            Physics.IgnoreCollision(sinkerCollider, currentWaterCollider, true);
 
         if (rb != null)
         {
@@ -102,19 +114,45 @@ public class Sinker : MonoBehaviour
             rb.useGravity = false;
             rb.linearDamping = waterDrag;
             rb.angularDamping = waterDrag;
-            rb.linearVelocity = new Vector3(rb.linearVelocity.x, Mathf.Min(rb.linearVelocity.y, 0f), rb.linearVelocity.z);
         }
 
         Debug.Log("Rig entrou na água.");
+    }
+
+    private void TryDetectWater()
+    {
+        if (IsInWater || IsOnBottom) return;
+
+        WaterDepth depth = FindFirstObjectByType<WaterDepth>();
+        if (depth == null) return;
+
+        float surface = depth.SurfaceHeight;
+        if (transform.position.y > surface + surfaceDetectionMargin) return;
+
+        Collider waterCollider = depth.GetComponent<Collider>();
+        if (waterCollider == null)
+            waterCollider = depth.GetComponentInChildren<Collider>();
+
+        if (waterCollider != null)
+        {
+            Bounds bounds = waterCollider.bounds;
+            Vector3 closest = bounds.ClosestPoint(transform.position);
+            bool insideHorizontalArea = Mathf.Abs(closest.x - transform.position.x) < 0.01f ||
+                                        Mathf.Abs(closest.z - transform.position.z) < 0.01f;
+            if (!insideHorizontalArea) return;
+        }
+
+        EnterWater(depth, waterCollider);
     }
 
     private void FixedUpdate()
     {
         if (rb == null) return;
 
+        TryDetectWater();
+
         if (!IsInWater)
         {
-            // Normal gravity before reaching the water.
             rb.useGravity = true;
             rb.linearDamping = 0f;
             return;
@@ -132,7 +170,6 @@ public class Sinker : MonoBehaviour
             return;
         }
 
-        // Downward acceleration represents the lead's effective weight in water.
         rb.AddForce(Vector3.down * sinkAcceleration, ForceMode.Acceleration);
     }
 
