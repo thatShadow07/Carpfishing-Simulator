@@ -1,7 +1,6 @@
 using UnityEngine;
 
-// Physical fishing line: keeps the sinker connected to a moving rod tip
-// with real Rigidbody/joint behaviour while also rendering the visible line.
+// Physical fishing line connecting the rod tip to the sinker.
 [RequireComponent(typeof(LineRenderer))]
 public class FishingLine : MonoBehaviour
 {
@@ -13,7 +12,7 @@ public class FishingLine : MonoBehaviour
     [SerializeField, Min(0.1f)] private float breakingStrain = 6f;
     [SerializeField, Min(0f)] private float jointDamper = 1.5f;
     [SerializeField, Min(0f)] private float jointSpring = 0f;
-    [SerializeField, Min(0f)] private float lineSlack = 0.15f;
+    [SerializeField, Min(0f)] private float lineSlack = 0.02f;
 
     private LineRenderer lineRenderer;
     private Transform target;
@@ -35,7 +34,6 @@ public class FishingLine : MonoBehaviour
         lineRenderer = GetComponent<LineRenderer>();
         lineRenderer.positionCount = 2;
         lineRenderer.enabled = false;
-
         CreateAnchor();
     }
 
@@ -52,17 +50,13 @@ public class FishingLine : MonoBehaviour
 
         float distance = Vector3.Distance(lineStart.position, target.position);
         float extension = Mathf.Max(0f, distance - Mathf.Max(0.01f, physicalLineLength - lineSlack));
-
-        // Estimate physical tension from how far the line is trying to exceed its length.
         tension = extension * 100f;
 
         if (jointSpring > 0f && extension > 0f)
             tension += extension * jointSpring;
 
         if (tension >= breakingStrain)
-        {
             BreakLine();
-        }
     }
 
     public void SetTarget(Transform newTarget)
@@ -88,10 +82,9 @@ public class FishingLine : MonoBehaviour
             return;
         }
 
-        physicalLineLength = Mathf.Max(
-            Vector3.Distance(lineStart.position, target.position),
-            defaultLineLength * 0.25f
-        );
+        // The line has a real, fixed amount of line instead of changing length
+        // every time a new sinker is created. This lets the sinker hang naturally.
+        physicalLineLength = Mathf.Max(0.1f, defaultLineLength);
 
         CreatePhysicalJoint(targetBody);
         lineRenderer.enabled = true;
@@ -156,6 +149,7 @@ public class FishingLine : MonoBehaviour
     private void BreakLine()
     {
         if (IsBroken) return;
+
         IsBroken = true;
         tension = breakingStrain;
         ClearPhysicalJoint();
@@ -168,7 +162,7 @@ public class FishingLine : MonoBehaviour
         if (IsBroken || target == null || lineStart == null) return 0f;
 
         float distance = Vector3.Distance(lineStart.position, target.position);
-        float excessLength = Mathf.Max(0f, distance - Mathf.Max(0.01f, physicalLineLength));
+        float excessLength = Mathf.Max(0f, distance - physicalLineLength);
 
         float targetSpeed = Time.fixedDeltaTime > 0f
             ? Vector3.Distance(target.position, previousTargetPosition) / Time.fixedDeltaTime
