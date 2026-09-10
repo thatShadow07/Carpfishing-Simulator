@@ -1,8 +1,5 @@
 using UnityEngine;
 
-// Physical anchor of the bottom-fishing rig.
-// The sinker is the object the line connects to. When a fish is hooked,
-// the fish is connected to this rig instead of being teleported to it.
 public class Sinker : MonoBehaviour
 {
     public static Sinker Current { get; private set; }
@@ -24,7 +21,6 @@ public class Sinker : MonoBehaviour
 
     private WaterDepth currentWater;
     private float targetBottomY;
-    private bool hasLanded;
 
     private void Awake()
     {
@@ -52,15 +48,12 @@ public class Sinker : MonoBehaviour
             return;
         }
 
-        if (IsInWater)
+        if (!IsInWater) return;
+        WaterDepth depth = currentWater != null ? currentWater : collision.gameObject.GetComponent<WaterDepth>();
+        if (depth != null)
         {
-            WaterDepth depth = currentWater != null ? currentWater : collision.gameObject.GetComponent<WaterDepth>();
-            if (depth != null)
-            {
-                targetBottomY = depth.GetBottomHeightAt(transform.position);
-                if (transform.position.y <= targetBottomY + 0.15f)
-                    SetOnBottom();
-            }
+            targetBottomY = depth.GetBottomHeightAt(transform.position);
+            if (transform.position.y <= targetBottomY + 0.15f) SetOnBottom();
         }
     }
 
@@ -68,15 +61,9 @@ public class Sinker : MonoBehaviour
     {
         IsInWater = true;
         currentWater = waterObject.GetComponent<WaterDepth>();
-
-        if (currentWater != null)
-            targetBottomY = currentWater.GetBottomHeightAt(transform.position);
-
-        hasLanded = true;
+        if (currentWater != null) targetBottomY = currentWater.GetBottomHeightAt(transform.position);
         IsOnBottom = false;
 
-        // The cast has finished. Let gravity and the controlled sinking phase
-        // place the lead on the lakebed.
         if (rb != null)
         {
             rb.linearVelocity = Vector3.zero;
@@ -90,14 +77,8 @@ public class Sinker : MonoBehaviour
     private void FixedUpdate()
     {
         if (!IsInWater || IsOnBottom || currentWater == null) return;
-
-        float bottom = currentWater.GetBottomHeightAt(transform.position);
-        targetBottomY = bottom;
-
-        // Keep the simple prototype stable: gravity does the main work, while
-        // the controlled vertical clamp prevents the lead falling through the bed.
-        if (transform.position.y <= targetBottomY + 0.05f)
-            SetOnBottom();
+        targetBottomY = currentWater.GetBottomHeightAt(transform.position);
+        if (transform.position.y <= targetBottomY + 0.05f) SetOnBottom();
     }
 
     private void SetOnBottom()
@@ -106,7 +87,6 @@ public class Sinker : MonoBehaviour
         Vector3 p = transform.position;
         p.y = targetBottomY;
         transform.position = p;
-
         if (rb != null)
         {
             rb.linearVelocity = Vector3.zero;
@@ -115,28 +95,9 @@ public class Sinker : MonoBehaviour
         }
     }
 
-    public void AttachFish(Transform fish)
-    {
-        AttachedFish = fish;
-    }
-
-    public void DetachFish()
-    {
-        AttachedFish = null;
-    }
-
+    public void AttachFish(Transform fish) => AttachedFish = fish;
+    public void DetachFish() => AttachedFish = null;
     public Transform GetAttachedFish() => AttachedFish;
-
-    // Used by the fight system to move the complete rig without destroying
-    // the fish-to-rig relationship.
-    public void MoveRig(Vector3 delta)
-    {
-        transform.position += delta;
-    }
-
-    public void MoveWithFish(Vector3 delta)
-    {
-        // Kept for compatibility with the previous fight controller.
-        // The new fight system should move the fish through line tension.
-    }
+    public void MoveRig(Vector3 delta) => transform.position += delta;
+    public void MoveWithFish(Vector3 delta) { }
 }
