@@ -12,6 +12,9 @@ public class CastingSystem : MonoBehaviour
     [SerializeField] private FishingLine fishingLine;
     [SerializeField] private FishingReel fishingReel;
 
+    [Header("Rig pendurado")]
+    [SerializeField, Min(0.1f)] private float hangingLineLength = 0.75f;
+
     [Header("Força")]
     [SerializeField] private float minForce = 5f;
     [SerializeField] private float maxForce = 25f;
@@ -76,7 +79,10 @@ public class CastingSystem : MonoBehaviour
         currentSinker.angularVelocity = Vector3.zero;
 
         if (fishingLine != null)
+        {
             fishingLine.SetTarget(currentSinker.transform);
+            fishingLine.SetLineLength(hangingLineLength);
+        }
 
         if (fishingReel != null)
             fishingReel.SetSinker(currentSinker);
@@ -87,6 +93,10 @@ public class CastingSystem : MonoBehaviour
         CreateHangingSinker();
         if (currentSinker == null || playerCamera == null)
             return;
+
+        // The cast releases the stored line before applying its impulse.
+        if (fishingLine != null)
+            fishingLine.ResetLineLength();
 
         float chargePercent = chargeTime > 0f ? chargeTimer / chargeTime : 0f;
         float force = Mathf.Lerp(minForce, maxForce, chargePercent);
