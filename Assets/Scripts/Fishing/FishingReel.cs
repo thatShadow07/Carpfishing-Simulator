@@ -7,10 +7,10 @@ public class FishingReel : MonoBehaviour
     [SerializeField] private CastingSystem castingSystem;
     [SerializeField] private Transform castOrigin;
 
-    [Header("Recolha")]
-    [SerializeField] private float reelForce = 12f;
-    [SerializeField] private float catchDistance = 0.3f;
-    [SerializeField] private float minimumTravelBeforeFinish = 1f;
+    [Header("Recolha Física")]
+    [SerializeField, Min(0f)] private float reelForce = 1.5f;
+    [SerializeField, Min(0.01f)] private float catchDistance = 0.3f;
+    [SerializeField, Min(0.1f)] private float minimumTravelBeforeFinish = 1f;
 
     private Rigidbody currentSinker;
     private bool sinkerHasLeftOrigin;
@@ -31,12 +31,9 @@ public class FishingReel : MonoBehaviour
 
         float distanceToOrigin = Vector3.Distance(currentSinker.position, castOrigin.position);
 
-        // O chumbo nasce no castOrigin. Só permitimos finalizar a recolha
-        // depois de ele se ter afastado uma distância real do ponto de lançamento.
         if (distanceToOrigin >= minimumTravelBeforeFinish)
             sinkerHasLeftOrigin = true;
 
-        // O reel aplica força. O Rigidbody continua completamente físico.
         if (Keyboard.current.rKey.isPressed)
         {
             Vector3 offset = castOrigin.position - currentSinker.position;
@@ -47,8 +44,6 @@ public class FishingReel : MonoBehaviour
             }
         }
 
-        // Só recolhemos/destruímos o chumbo depois de ele realmente ter
-        // saído do ponto de lançamento e voltar ao castOrigin.
         if (sinkerHasLeftOrigin && distanceToOrigin <= catchDistance)
             FinishReel();
     }
