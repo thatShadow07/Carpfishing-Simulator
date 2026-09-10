@@ -9,6 +9,7 @@ public class FishingReel : MonoBehaviour
 
     [Header("Recolha Física")]
     [SerializeField, Min(0f)] private float reelForce = 1.5f;
+    [SerializeField, Min(0.05f)] private float maximumReelSpeed = 0.75f;
     [SerializeField, Min(0.01f)] private float catchDistance = 0.3f;
     [SerializeField, Min(0.1f)] private float minimumTravelBeforeFinish = 1f;
 
@@ -41,6 +42,9 @@ public class FishingReel : MonoBehaviour
             {
                 Vector3 direction = offset.normalized;
                 currentSinker.AddForce(direction * reelForce, ForceMode.Force);
+                float towardOriginSpeed = Vector3.Dot(currentSinker.linearVelocity, direction);
+                if (towardOriginSpeed > maximumReelSpeed)
+                    currentSinker.linearVelocity -= direction * (towardOriginSpeed - maximumReelSpeed);
             }
         }
 
