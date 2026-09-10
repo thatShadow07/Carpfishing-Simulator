@@ -8,9 +8,8 @@ public class FishingReel : MonoBehaviour
     [SerializeField] private Transform castOrigin;
 
     [Header("Recolha")]
-    [SerializeField] private float reelSpeed = 4f;
+    [SerializeField] private float reelForce = 12f;
     [SerializeField] private float catchDistance = 0.3f;
-    [SerializeField] private float liftDistance = 2f;
 
     private Rigidbody currentSinker;
 
@@ -19,25 +18,28 @@ public class FishingReel : MonoBehaviour
     private void Update()
     {
         if (currentSinker == null || castOrigin == null) return;
+
         Sinker sinker = currentSinker.GetComponent<Sinker>();
         if (sinker != null && sinker.GetAttachedFish() != null) return;
-        if (Keyboard.current == null || !Keyboard.current.rKey.isPressed) return;
+        if (Keyboard.current == null) return;
 
-        currentSinker.isKinematic = true;
-        Vector3 current = currentSinker.position;
-        Vector3 target = castOrigin.position;
-        float horizontalDistance = Vector3.Distance(new Vector3(current.x, 0f, current.z), new Vector3(target.x, 0f, target.z));
-        Vector3 desiredPoint = horizontalDistance > liftDistance ? new Vector3(target.x, current.y, target.z) : target;
-        Vector3 newPosition = Vector3.MoveTowards(current, desiredPoint, reelSpeed * Time.deltaTime);
-        currentSinker.MovePosition(newPosition);
+        // Nunca tornamos o chumbo kinematic durante o reel.
+        // O Rigidbody continua a reagir à gravidade, água e linha física.
+        if (Keyboard.current.rKey.isPressed)
+        {
+            Vector3 direction = (castOrigin.position - currentSinker.position).normalized;
+            currentSinker.AddForce(direction * reelForce, ForceMode.Force);
+        }
 
-        if (Vector3.Distance(newPosition, target) <= catchDistance) FinishReel();
+        if (Vector3.Distance(currentSinker.position, castOrigin.position) <= catchDistance)
+            FinishReel();
     }
 
     private void FinishReel()
     {
-        Sinker sinker = currentSinker.GetComponent< Sinker>();
+        Sinker sinker = currentSinker.GetComponent<Sinker>();
         Transform attachedFish = sinker != null ? sinker.GetAttachedFish() : null;
+
         if (attachedFish != null)
         {
             FishFightController fight = attachedFish.GetComponent<FishFightController>();
@@ -46,7 +48,10 @@ public class FishingReel : MonoBehaviour
 
         Destroy(currentSinker.gameObject);
         currentSinker = null;
-        if (castingSystem != null) castingSystem.ResetCast();
+
+        if (castingSystem != null)
+            castingSystem.ResetCast();
+
         Debug.Log("Rig recolhido.");
     }
 }
