@@ -62,17 +62,6 @@ public class Sinker : MonoBehaviour
         if (rb == null)
             return;
 
-        // The rig is visually and physically carried by the hooked fish.
-        // FishingLine targets the fish directly during a fight, so this object
-        // must only follow it and must not run its own bottom physics.
-        if (AttachedFish != null)
-        {
-            rb.isKinematic = true;
-            rb.position = AttachedFish.position;
-            rb.rotation = AttachedFish.rotation;
-            return;
-        }
-
         if (!IsInWater)
         {
             WaterDepth detectedWater = FindWaterAtPosition();
@@ -82,11 +71,17 @@ public class Sinker : MonoBehaviour
 
         if (!IsInWater || currentWater == null || IsOnBottom)
         {
-            rb.useGravity = true;
+            if (!IsOnBottom)
+            {
+                rb.useGravity = true;
+                rb.isKinematic = false;
+                rb.linearDamping = 0f;
+            }
             return;
         }
 
         rb.useGravity = false;
+        rb.isKinematic = false;
         rb.linearDamping = waterDrag;
 
         targetBottomY = currentWater.GetBottomHeightAt(transform.position);
@@ -108,7 +103,8 @@ public class Sinker : MonoBehaviour
 
         foreach (WaterDepth water in waters)
         {
-            if (water == null) continue;
+            if (water == null)
+                continue;
 
             float dx = transform.position.x - water.transform.position.x;
             float dz = transform.position.z - water.transform.position.z;
@@ -142,12 +138,15 @@ public class Sinker : MonoBehaviour
 
         if (depth != null)
         {
-            Physics.IgnoreCollision(GetComponent<Collider>(), collision.collider, true);
+            Collider sinkerCollider = GetComponent<Collider>();
+            if (sinkerCollider != null && collision.collider != null)
+                Physics.IgnoreCollision(sinkerCollider, collision.collider, true);
+
             EnterWater(depth);
             return;
         }
 
-        if (!IsInWater || currentWater == null)
+        if (!IsInWater || currentWater == null || !rb)
             return;
 
         targetBottomY = currentWater.GetBottomHeightAt(transform.position);
@@ -185,21 +184,22 @@ public class Sinker : MonoBehaviour
         rb.isKinematic = true;
     }
 
-    public void AttachFish(Transform fish)
+    public void ReleaseFromBottom(Vector3 pullDirection)
     {
-        AttachedFish = fish;
+        if (rb == null)
+            return;
+
         IsOnBottom = false;
+        rb.isKinematic = false;
+        rb.useGravity = false;
+        rb.linearDamping = waterDrag;
+
+        if (pullDirection.sqrMagnitude > 0.0001f)
+            rb.AddForce(pullDirection.normalized * 0.25f, ForceMode.VelocityChange);
     }
 
-    public void DetachFish()
-    {
-        AttachedFish = null;
-        if (rb != null && IsInWater)
-        {
-            rb.isKinematic = false;
-            rb.useGravity = false;
-        }
-    }
+    public void AttachFish(Transform fish) => AttachedFish = fish;
+    public void DetachFish() => AttachedFish = null;
     public Transform GetAttachedFish() => AttachedFish;
 
     public void MoveRig(Vector3 delta)
