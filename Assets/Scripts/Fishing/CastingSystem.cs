@@ -70,9 +70,9 @@ public class CastingSystem : MonoBehaviour
 
         currentSinker = Instantiate(sinkerPrefab, castOrigin.position, Quaternion.identity);
         // While idle the rig belongs to the rod. Physics starts only at release.
+        // A new Rigidbody has no velocity, and Unity forbids setting it after
+        // it becomes kinematic.
         currentSinker.isKinematic = true;
-        currentSinker.linearVelocity = Vector3.zero;
-        currentSinker.angularVelocity = Vector3.zero;
 
         if (fishingLine != null)
             fishingLine.SetTarget(currentSinker.transform);
