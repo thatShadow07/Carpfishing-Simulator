@@ -86,7 +86,10 @@ public class CastingSystem : MonoBehaviour
         }
 
         if (fishingReel != null)
+        {
+            fishingReel.SetFishingLine(fishingLine);
             fishingReel.SetSinker(currentSinker);
+        }
     }
 
     private void Cast()
