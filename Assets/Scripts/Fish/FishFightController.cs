@@ -2,285 +2,372 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// Controla a luta da carpa através do rig real. Tem duas camadas de
-/// cansaço: stamina de curto prazo (recupera quando o jogador não está a
-/// puxar) e fadiga acumulada ao longo de toda a luta (nunca recupera, só
-/// piora - reduz o teto da stamina e a intensidade das arrancadas com o
-/// tempo). Perto da margem, mesmo cansada, pode tentar uma última investida.
+/// Sistema de luta da carpa. O peixe usa força, peso, stamina e personalidade
+/// para decidir quando arrancar, mudar de direção, procurar obstáculos e descansar.
+/// O jogador aproxima o rig ao pescar, mas o peixe não é puxado instantaneamente.
 /// </summary>
 public class FishFightController : MonoBehaviour
 {
-    [Header("Fish Stats")]
-    [SerializeField] private float fishWeight = 8f;
-    [SerializeField] private float fishStrength = 1f;
-    [SerializeField] private float maxStamina = 100f;
-
     [Header("References")]
+    [SerializeField] private FishAI fishAI;
     [SerializeField] private Transform playerTransform;
     [SerializeField] private FishingLine fishingLine;
 
-    [Header("Fight")]
-    [SerializeField] private float minimumDistance = 1.5f;
-    [SerializeField] private float reelSpeed = 2f;
-    [SerializeField] private float fishResistanceSpeed = 0.8f;
-    [SerializeField] private float maxRigFishDistance = 2f;
+    [Header("Fallback Fish Stats")]
+    [SerializeField, Min(0.1f)] private float fishWeight = 8f;
+    [SerializeField, Min(0.1f)] private float fishStrength = 1f;
+    [SerializeField, Min(1f)] private float maxStamina = 100f;
 
-    [Header("Arrancadas (Bursts)")]
-    [SerializeField] private float burstDurationMin = 1.2f;
-    [SerializeField] private float burstDurationMax = 3f;
-    [SerializeField] private float burstCooldownMin = 3f;
-    [SerializeField] private float burstCooldownMax = 8f;
-    [SerializeField] private float burstSpeed = 4f;
-    [SerializeField, Range(0f, 1f)] private float burstSpeedVariance = 0.2f;
-    [SerializeField, Range(0f, 2f)] private float burstTriggerChancePerSecond = 0.5f;
-    [SerializeField, Range(0f, 1f)] private float minStaminaPercentForBurst = 0.6f;
+    [Header("Reeling")]
+    [SerializeField, Min(0.1f)] private float reelSpeed = 2f;
+    [SerializeField, Min(0.1f)] private float fishFollowSpeed = 1.2f;
+    [SerializeField, Min(0.1f)] private float minimumLandingDistance = 2f;
 
-    [Header("Stamina (curto prazo)")]
-    [SerializeField] private float staminaDrainPerSecond = 12f;
-    [SerializeField] private float staminaRecoveryPerSecond = 2.5f;
-    [SerializeField] private float exhaustedRecoveryDelay = 3f;
-    [SerializeField, Range(0f, 1f)] private float resistanceStrength = 0.7f;
-    [SerializeField, Range(0f, 1f)] private float reelingRecoveryMultiplier = 0.1f; // quase não recupera enquanto puxas
+    [Header("Fight Distance")]
+    [SerializeField, Min(1f)] private float maximumFishDistance = 30f;
+    [SerializeField, Min(0.1f)] private float minimumRigDistance = 0.5f;
+    [SerializeField, Min(0.1f)] private float maximumRigDistance = 3f;
 
-    [Header("Fadiga acumulada (toda a luta)")]
-    [SerializeField] private float overallFatigueGainPerStaminaPoint = 0.006f;
-    [SerializeField, Range(0f, 1f)] private float maxOverallFatigue = 0.85f;
-    [SerializeField, Range(0f, 1f)] private float overallFatigueStaminaCeilingImpact = 0.7f;
-    [SerializeField, Range(0f, 1f)] private float overallFatigueRecoveryPenalty = 0.6f;
-    [SerializeField, Range(0f, 1f)] private float overallFatigueBurstPenalty = 0.5f;
+    [Header("Burst")]
+    [SerializeField, Min(0.1f)] private float burstDurationMin = 1.5f;
+    [SerializeField, Min(0.1f)] private float burstDurationMax = 4f;
+    [SerializeField, Min(0f)] private float burstCooldownMin = 3f;
+    [SerializeField, Min(0f)] private float burstCooldownMax = 8f;
+    [SerializeField, Min(0.1f)] private float burstSpeed = 5f;
+    [SerializeField, Range(0f, 1f)] private float burstSpeedVariation = 0.2f;
 
-    [Header("Última investida perto da margem")]
-    [SerializeField] private float secondWindDistance = 4f;
-    [SerializeField, Range(0f, 2f)] private float secondWindChanceBoost = 1f;
+    [Header("Stamina")]
+    [SerializeField, Min(0f)] private float staminaDrainPerSecond = 10f;
+    [SerializeField, Min(0f)] private float staminaRecoveryPerSecond = 3f;
+    [SerializeField, Range(0f, 1f)] private float exhaustedThreshold = 0.1f;
+    [SerializeField, Range(0f, 1f)] private float tiredThreshold = 0.3f;
+
+    [Header("Behaviour")]
+    [SerializeField, Range(0f, 1f)] private float obstacleFallbackChance = 0.25f;
+    [SerializeField] private float obstacleCheckDistance = 6f;
+    [SerializeField] private LayerMask obstacleMask;
+
+    private FishSpeciesData data;
+    private FishAI.FishState state = FishAI.FishState.Roaming;
 
     private float stamina;
-    private float overallFatigue;
-    private float toughnessFactor = 1f;
-    private float distanceFromPlayer;
     private float burstTimer;
-    private float cooldownTimer;
-    private float exhaustedTimer;
-    private float currentBurstSpeedMultiplier;
+    private float burstCooldown;
     private Vector3 burstDirection;
     private bool isFighting;
-    private bool isBursting;
     private Sinker hookedSinker;
 
-    public float Stamina => stamina;
-    public float DistanceFromPlayer => distanceFromPlayer;
     public bool IsFighting => isFighting;
-    public bool IsBursting => isBursting;
+    public bool IsBursting => state == FishAI.FishState.Fighting && burstTimer > 0f;
+    public float Stamina => stamina;
+    public float StaminaNormalized => maxStamina <= 0f ? 0f : stamina / maxStamina;
+    public float DistanceFromPlayer => playerTransform == null ? 0f : Vector3.Distance(transform.position, playerTransform.position);
 
-    private float EffectiveMaxStamina => maxStamina * (1f - overallFatigue * overallFatigueStaminaCeilingImpact);
+    private void Awake()
+    {
+        if (fishAI == null)
+            fishAI = GetComponent<FishAI>();
 
-    private void Awake() => stamina = maxStamina;
+        if (fishAI != null)
+            data = fishAI.SpeciesData;
+    }
 
     private void Update()
     {
-        if (!isFighting || playerTransform == null || hookedSinker == null) return;
+        if (!isFighting)
+            return;
+
+        if (playerTransform == null || hookedSinker == null)
+        {
+            Debug.LogWarning("FishFightController: faltam Player Transform ou Sinker.");
+            return;
+        }
+
         UpdateFight(Time.deltaTime);
     }
 
     public void BeginFight()
     {
+        if (isFighting)
+            return;
+
         if (playerTransform == null)
         {
-            Debug.LogWarning("FishFightController: Player Transform não está atribuído.");
+            Debug.LogWarning("FishFightController: atribui o Player Transform no Inspector.");
             return;
         }
 
         hookedSinker = Sinker.Current;
         if (hookedSinker == null || !hookedSinker.IsInWater)
         {
-            Debug.LogWarning("FishFightController: não foi encontrado um rig na água para ligar à carpa.");
+            Debug.LogWarning("FishFightController: não existe um Sinker na água para ligar à carpa.");
             return;
         }
 
-        isFighting = true;
-        isBursting = false;
+        data = fishAI != null ? fishAI.SpeciesData : data;
+
+        if (data != null)
+        {
+            fishWeight = data.WeightKg;
+            fishStrength = data.Strength;
+            maxStamina = data.MaxStamina;
+        }
+
         stamina = maxStamina;
-        overallFatigue = 0f;
-        toughnessFactor = Mathf.Max(0.3f, (fishWeight / 8f) * fishStrength);
-        cooldownTimer = 0f;
-        exhaustedTimer = 0f;
-        distanceFromPlayer = Vector3.Distance(transform.position, playerTransform.position);
+        burstTimer = 0f;
+        burstCooldown = Random.Range(burstCooldownMin, burstCooldownMax);
+        isFighting = true;
+        state = FishAI.FishState.Fighting;
 
         hookedSinker.AttachFish(transform);
 
         if (fishingLine != null)
             fishingLine.SetTarget(hookedSinker.transform);
 
-        StartBurst();
-        Debug.Log($"⚔️ FIGHTING! A carpa de {fishWeight:F1} kg começou a lutar a {distanceFromPlayer:F1} m do jogador.");
+        if (fishAI != null)
+            fishAI.OnFightStarted();
+
+        Debug.Log($"🐟 COMBATE! Carpa {fishWeight:F1} kg / força {fishStrength:F2}");
     }
 
     private void UpdateFight(float deltaTime)
     {
-        bool isReeling = Keyboard.current != null && Keyboard.current.rKey.isPressed;
+        float distance = Vector3.Distance(transform.position, playerTransform.position);
 
-        if (isBursting)
+        if (distance > maximumFishDistance)
         {
-            burstTimer -= deltaTime;
-            SpendStamina(staminaDrainPerSecond * fishStrength * deltaTime);
-            MoveFishAndRig(burstDirection, burstSpeed * fishStrength * currentBurstSpeedMultiplier * deltaTime);
-
-            if (burstTimer <= 0f || stamina <= 0f)
-            {
-                isBursting = false;
-                cooldownTimer = Random.Range(burstCooldownMin, burstCooldownMax);
-
-                if (stamina <= 0f)
-                {
-                    exhaustedTimer = exhaustedRecoveryDelay;
-                    Debug.Log("🐟 A carpa ficou completamente cansada e precisa de recuperar.");
-                }
-                else Debug.Log("🐟 A carpa cansou da arrancada.");
-            }
-
-            UpdateDistance();
+            FinishFight(false, "A carpa ganhou distância suficiente e escapou.");
             return;
         }
 
-        cooldownTimer -= deltaTime;
-
-        if (exhaustedTimer > 0f)
+        if (burstTimer > 0f)
         {
-            exhaustedTimer -= deltaTime;
+            UpdateBurst(deltaTime);
+            return;
         }
+
+        burstCooldown -= deltaTime;
+
+        bool reeling = Keyboard.current != null && Keyboard.current.rKey.isPressed;
+
+        if (reeling)
+            PullRigAndFish(deltaTime);
         else
+            RecoverStamina(deltaTime);
+
+        if (stamina <= maxStamina * exhaustedThreshold)
         {
-            float recoveryMultiplier = Mathf.Lerp(1f, 1f - overallFatigueRecoveryPenalty, overallFatigue);
-
-            // Enquanto o jogador mantém a linha em tensão (a puxar), a carpa
-            // quase não recupera. Só descansa a sério quando a pressão alivia.
-            if (isReeling) recoveryMultiplier *= reelingRecoveryMultiplier;
-
-            stamina = Mathf.Min(EffectiveMaxStamina, stamina + staminaRecoveryPerSecond * recoveryMultiplier * deltaTime);
+            state = FishAI.FishState.Tired;
+            if (fishAI != null)
+                fishAI.OnFightTired();
+        }
+        else if (state == FishAI.FishState.Tired && stamina >= maxStamina * tiredThreshold)
+        {
+            state = FishAI.FishState.Fighting;
         }
 
-        if (isReeling) ReelRig(deltaTime);
-
-        UpdateDistance();
-
-        bool nearMargin = distanceFromPlayer <= secondWindDistance;
-        float staminaThreshold = EffectiveMaxStamina * (nearMargin ? minStaminaPercentForBurst * 0.5f : minStaminaPercentForBurst);
-        bool readyToBurst = cooldownTimer <= 0f && exhaustedTimer <= 0f && stamina > staminaThreshold;
-
-        float triggerChance = burstTriggerChancePerSecond * (nearMargin ? (1f + secondWindChanceBoost) : 1f);
-
-        if (readyToBurst && Random.value < triggerChance * deltaTime)
-        {
+        if (burstCooldown <= 0f && state != FishAI.FishState.Tired && ShouldBurst())
             StartBurst();
-        }
     }
 
-    private void SpendStamina(float amount)
+    private void RecoverStamina(float deltaTime)
     {
-        stamina = Mathf.Max(0f, stamina - amount);
-        overallFatigue = Mathf.Min(maxOverallFatigue, overallFatigue + (amount * overallFatigueGainPerStaminaPoint) / toughnessFactor);
+        float recoveryMultiplier = data != null ? data.StaminaRecoveryMultiplier : 1f;
+        stamina = Mathf.Min(maxStamina, stamina + staminaRecoveryPerSecond * recoveryMultiplier * deltaTime);
+    }
+
+    private bool ShouldBurst()
+    {
+        if (stamina <= maxStamina * 0.25f)
+            return false;
+
+        float chance = data != null ? data.BurstChance : 0.5f;
+        float aggression = data != null ? data.Aggression : 0.5f;
+
+        chance *= Mathf.Lerp(0.55f, 1.5f, aggression);
+        return Random.value < chance * Time.deltaTime;
     }
 
     private void StartBurst()
     {
-        isBursting = true;
+        state = FishAI.FishState.Fighting;
+        burstTimer = Random.Range(burstDurationMin, burstDurationMax);
+        burstCooldown = Random.Range(burstCooldownMin, burstCooldownMax);
 
-        float fatigueScale = Mathf.Lerp(1f, 1f - overallFatigueBurstPenalty, overallFatigue);
-        burstTimer = Random.Range(burstDurationMin, burstDurationMax) * fatigueScale;
-        currentBurstSpeedMultiplier = Random.Range(1f - burstSpeedVariance, 1f + burstSpeedVariance) * fatigueScale;
+        float speedMultiplier = Random.Range(1f - burstSpeedVariation, 1f + burstSpeedVariation);
+        burstDirection = ChooseBurstDirection();
 
-        Vector3 awayFromPlayer = transform.position - playerTransform.position;
-        awayFromPlayer.y = 0f;
+        float speed = burstSpeed * speedMultiplier;
+        if (data != null)
+            speed *= Mathf.Max(0.5f, data.Strength);
 
-        if (awayFromPlayer.sqrMagnitude < 0.001f)
-        {
-            awayFromPlayer = -playerTransform.forward;
-            awayFromPlayer.y = 0f;
-        }
+        // Guarda a velocidade no vetor para manter a arrancada consistente.
+        burstDirection *= speed;
 
-        burstDirection = awayFromPlayer.normalized;
-        Debug.Log($"💨 A carpa fez uma nova arrancada! ({burstTimer:F1}s, fadiga acumulada: {overallFatigue:P0})");
+        Debug.Log("💨 A carpa arrancou!");
     }
 
-    private void ReelRig(float deltaTime)
+    private void UpdateBurst(float deltaTime)
     {
-        Vector3 fishToRig = hookedSinker.transform.position - transform.position;
-        fishToRig.y = 0f;
-        float fishRigDistanceBefore = fishToRig.magnitude;
+        float drainMultiplier = data != null ? data.StaminaDrainMultiplier : 1f;
+        stamina = Mathf.Max(0f, stamina - staminaDrainPerSecond * drainMultiplier * deltaTime);
 
-        float fatigue = 1f - stamina / maxStamina;
-        float resistance = Mathf.Lerp(1f, 0.25f, fatigue) * fishStrength;
-
-        Vector3 rigToPlayer = playerTransform.position - hookedSinker.transform.position;
-        rigToPlayer.y = 0f;
-        float rigDistance = rigToPlayer.magnitude;
-
-        if (rigDistance > 0.001f)
-        {
-            float requestedMovement = Mathf.Min(reelSpeed * deltaTime, rigDistance);
-
-            float tension = Mathf.Clamp01(fishRigDistanceBefore / maxRigFishDistance);
-            float resistanceFactor = Mathf.Lerp(1f, 1f - resistanceStrength * resistance, tension);
-            float actualMovement = requestedMovement * resistanceFactor;
-
-            hookedSinker.transform.position += rigToPlayer.normalized * actualMovement;
-        }
-
-        Vector3 updatedFishToRig = hookedSinker.transform.position - transform.position;
-        updatedFishToRig.y = 0f;
-        float fishRigDistance = updatedFishToRig.magnitude;
-
-        if (fishRigDistance > 0.001f)
-        {
-            float followFactor = Mathf.Lerp(0.25f, 1f, fatigue);
-            float followSpeed = fishResistanceSpeed * (1f + followFactor);
-            float fishMovement = Mathf.Min(followSpeed * deltaTime, fishRigDistance);
-            transform.position += updatedFishToRig.normalized * fishMovement;
-        }
-
-        Vector3 finalFishToRig = hookedSinker.transform.position - transform.position;
-        finalFishToRig.y = 0f;
-        float finalDistance = finalFishToRig.magnitude;
-
-        if (finalDistance > maxRigFishDistance)
-        {
-            Vector3 correction = finalFishToRig.normalized * (finalDistance - maxRigFishDistance);
-            float fishShare = Mathf.Clamp01(0.35f + fatigue * 0.35f);
-
-            transform.position += correction * fishShare;
-            hookedSinker.transform.position -= correction * (1f - fishShare);
-        }
-
-        SpendStamina(staminaDrainPerSecond * 0.08f * deltaTime);
-
-        if (Vector3.Distance(transform.position, playerTransform.position) <= minimumDistance)
-            EndFight();
-    }
-
-    private void MoveFishAndRig(Vector3 direction, float distance)
-    {
-        Vector3 movement = direction.normalized * distance;
+        Vector3 movement = burstDirection * deltaTime;
         movement.y = 0f;
 
         transform.position += movement;
-        if (hookedSinker != null) hookedSinker.transform.position += movement;
 
         if (movement.sqrMagnitude > 0.001f)
-            transform.rotation = Quaternion.LookRotation(movement.normalized, Vector3.up);
+        {
+            Quaternion targetRotation = Quaternion.LookRotation(movement.normalized, Vector3.up);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 5f * deltaTime);
+        }
+
+        MoveRigWithFish(movement);
+        burstTimer -= deltaTime;
+
+        if (stamina <= 0f || burstTimer <= 0f)
+        {
+            burstTimer = 0f;
+            state = FishAI.FishState.Fighting;
+
+            if (stamina <= 0f && fishAI != null)
+                fishAI.OnFightTired();
+        }
     }
 
-    private void UpdateDistance()
+    private Vector3 ChooseBurstDirection()
     {
-        distanceFromPlayer = Vector3.Distance(transform.position, playerTransform.position);
+        Vector3 awayFromPlayer = transform.position - playerTransform.position;
+        awayFromPlayer.y = 0f;
+
+        if (awayFromPlayer.sqrMagnitude < 0.01f)
+            awayFromPlayer = -playerTransform.forward;
+
+        awayFromPlayer.Normalize();
+
+        Vector3 obstacleDirection = FindObstacleDirection();
+        float obstacleSeeking = data != null ? data.ObstacleSeeking : obstacleFallbackChance;
+
+        if (obstacleDirection != Vector3.zero && Random.value < obstacleSeeking)
+            return obstacleDirection;
+
+        // Varia ligeiramente a direção para não parecer um NPC que foge sempre em linha reta.
+        float angle = Random.Range(-35f, 35f);
+        return Quaternion.Euler(0f, angle, 0f) * awayFromPlayer;
     }
 
-    public void EndFight()
+    private Vector3 FindObstacleDirection()
     {
+        if (obstacleMask.value == 0)
+            return Vector3.zero;
+
+        Collider[] hits = Physics.OverlapSphere(transform.position, obstacleCheckDistance, obstacleMask);
+        if (hits.Length == 0)
+            return Vector3.zero;
+
+        Collider closest = hits[0];
+        float closestDistance = Vector3.Distance(transform.position, closest.transform.position);
+
+        foreach (Collider hit in hits)
+        {
+            float d = Vector3.Distance(transform.position, hit.transform.position);
+            if (d < closestDistance)
+            {
+                closest = hit;
+                closestDistance = d;
+            }
+        }
+
+        Vector3 direction = closest.transform.position - transform.position;
+        direction.y = 0f;
+        return direction.sqrMagnitude > 0.01f ? direction.normalized : Vector3.zero;
+    }
+
+    private void PullRigAndFish(float deltaTime)
+    {
+        if (hookedSinker == null)
+            return;
+
+        Vector3 rigToPlayer = playerTransform.position - hookedSinker.transform.position;
+        rigToPlayer.y = 0f;
+
+        if (rigToPlayer.sqrMagnitude > 0.001f)
+        {
+            float reel = reelSpeed * deltaTime;
+            hookedSinker.transform.position += rigToPlayer.normalized * reel;
+        }
+
+        Vector3 fishToRig = hookedSinker.transform.position - transform.position;
+        fishToRig.y = 0f;
+
+        float rigDistance = fishToRig.magnitude;
+
+        if (rigDistance > maximumRigDistance)
+        {
+            float strength = data != null ? data.Strength : fishStrength;
+            float resistance = Mathf.Clamp01(1f / Mathf.Max(0.5f, strength));
+            float follow = fishFollowSpeed * Mathf.Lerp(0.25f, 1f, resistance) * deltaTime;
+            transform.position += fishToRig.normalized * Mathf.Min(follow, rigDistance - maximumRigDistance);
+        }
+
+        // Puxar cansa o peixe, mas pouco a pouco. Peixe forte resiste mais.
+        float drainMultiplier = data != null ? data.StaminaDrainMultiplier : 1f;
+        stamina = Mathf.Max(0f, stamina - staminaDrainPerSecond * 0.12f * drainMultiplier * deltaTime);
+
+        float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
+        if (distanceToPlayer <= minimumLandingDistance && stamina <= maxStamina * tiredThreshold)
+        {
+            FinishFight(true, "🎣 A carpa está cansada e chegou à margem.");
+        }
+    }
+
+    private void MoveRigWithFish(Vector3 movement)
+    {
+        if (hookedSinker == null)
+            return;
+
+        hookedSinker.transform.position += movement;
+
+        Vector3 fishToRig = hookedSinker.transform.position - transform.position;
+        fishToRig.y = 0f;
+
+        if (fishToRig.magnitude > maximumRigDistance)
+            hookedSinker.transform.position = transform.position + fishToRig.normalized * maximumRigDistance;
+    }
+
+    private void FinishFight(bool landed, string message)
+    {
+        if (!isFighting)
+            return;
+
         isFighting = false;
-        isBursting = false;
+        burstTimer = 0f;
 
-        if (hookedSinker != null) hookedSinker.DetachFish();
-        if (fishingLine != null) fishingLine.Clear();
+        if (hookedSinker != null)
+            hookedSinker.DetachFish();
 
-        Debug.Log("🎣 Combate terminado — peixe e rig libertados.");
+        if (fishingLine != null)
+            fishingLine.Clear();
+
+        if (landed)
+        {
+            state = FishAI.FishState.Landed;
+            if (fishAI != null)
+                fishAI.OnFishLanded();
+        }
+        else
+        {
+            state = FishAI.FishState.Lost;
+            if (fishAI != null)
+                fishAI.OnFishLost();
+        }
+
+        Debug.Log(message);
+    }
+
+    public void ForceEndFight()
+    {
+        FinishFight(false, "🎣 Combate terminado.");
     }
 }
