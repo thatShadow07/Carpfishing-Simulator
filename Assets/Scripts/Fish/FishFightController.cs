@@ -152,8 +152,13 @@ public class FishFightController : MonoBehaviour
         fishBody.linearVelocity = Vector3.zero;
         fishBody.angularVelocity = Vector3.zero;
 
+        // The main line always remains connected to the physical rig. The fish
+        // is connected to that rig by Sinker.AttachFish, preserving the chain
+        // instead of replacing the rig with the fish as the line target.
         hookedSinker.AttachFish(transform);
-        fishingLine.SetTarget(transform);
+        if (fishingLine.Target != hookedSinker.transform)
+            fishingLine.SetTarget(hookedSinker.transform);
+
         fishAI?.OnFightStarted();
         ChooseRunDirection(true);
 
