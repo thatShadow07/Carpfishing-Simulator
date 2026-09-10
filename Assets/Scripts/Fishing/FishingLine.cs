@@ -23,7 +23,7 @@ public class FishingLine : MonoBehaviour
     private Transform jointAnchor;
     private Rigidbody jointAnchorBody;
     private ConfigurableJoint physicalJoint;
-    private Vector3 previousTargetPosition;
+    private float previousDistance;
     private float tension;
     private float physicalLineLength;
 
@@ -55,8 +55,13 @@ public class FishingLine : MonoBehaviour
 
         float distance = Vector3.Distance(lineStart.position, target.position);
         float extension = Mathf.Max(0f, distance - (physicalLineLength + lineSlack));
-        float radialSpeed = GetRadialTargetSpeed();
-        float targetTension = extension * jointSpring + Mathf.Max(0f, radialSpeed) * jointDamper;
+        // Measure the line's own extension speed, not world-space target speed.
+        // Walking with the rod must not create artificial tension.
+        float radialSpeed = Time.fixedDeltaTime > 0f
+            ? (distance - previousDistance) / Time.fixedDeltaTime
+            : 0f;
+        float targetTension = extension * jointSpring + Mathf.Max(0f, radialSpeed) * 0.1f;
+        previousDistance = distance;
 
         tension = Mathf.MoveTowards(tension, targetTension, tensionSmoothing * Time.fixedDeltaTime);
 
@@ -69,7 +74,9 @@ public class FishingLine : MonoBehaviour
         ClearPhysicalJoint();
 
         target = newTarget;
-        previousTargetPosition = target != null ? target.position : Vector3.zero;
+        previousDistance = target != null && lineStart != null
+            ? Vector3.Distance(lineStart.position, target.position)
+            : 0f;
         tension = 0f;
         IsBroken = false;
         physicalLineLength = Mathf.Max(minimumLineLength, defaultLineLength);
@@ -128,27 +135,6 @@ public class FishingLine : MonoBehaviour
         SoftJointLimit limit = physicalJoint.linearLimit;
         limit.limit = physicalLineLength;
         physicalJoint.linearLimit = limit;
-    }
-
-    private float GetRadialTargetSpeed()
-    {
-        if (target == null)
-            return 0f;
-
-        Vector3 fromLineStart = target.position - lineStart.position;
-        float distance = fromLineStart.magnitude;
-        float speed = Time.fixedDeltaTime > 0f
-            ? Vector3.Distance(target.position, previousTargetPosition) / Time.fixedDeltaTime
-            : 0f;
-
-        if (distance > 0.001f)
-        {
-            Vector3 displacement = target.position - previousTargetPosition;
-            speed = Vector3.Dot(displacement / Time.fixedDeltaTime, fromLineStart / distance);
-        }
-
-        previousTargetPosition = target.position;
-        return speed;
     }
 
     private void CreateAnchor()
