@@ -146,8 +146,6 @@ public class FishAI : MonoBehaviour
         float takeTime = Mathf.Lerp(takeTimeMin, takeTimeMax, Caution);
         if (inspectTimer < takeTime) return;
 
-        // Hook is deliberately deterministic here. Realism comes from the
-        // fight after the take: tension, drag, runs, stamina and line break.
         TryHookFish();
     }
 
@@ -234,6 +232,11 @@ public class FishAI : MonoBehaviour
         nextBaitCheckTime = Time.time + baitCooldown;
         ChooseNewDestination();
         ChangeState(FishState.Roaming);
+    }
+
+    private void ChangeState(FishState newState)
+    {
+        currentState = newState;
     }
 
     public void OnFightStarted() => ChangeState(FishState.Fighting);
