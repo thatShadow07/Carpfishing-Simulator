@@ -12,8 +12,9 @@ public class CastingSystem : MonoBehaviour
     [SerializeField] private FishingLine fishingLine;
     [SerializeField] private FishingReel fishingReel;
 
-    [Header("Rig pendurado")]
+    [Header("Linha")]
     [SerializeField, Min(0.1f)] private float hangingLineLength = 0.75f;
+    [SerializeField, Min(1f)] private float castLineLength = 35f;
 
     [Header("Força")]
     [SerializeField] private float minForce = 5f;
@@ -94,9 +95,10 @@ public class CastingSystem : MonoBehaviour
         if (currentSinker == null || playerCamera == null)
             return;
 
-        // The cast releases the stored line before applying its impulse.
+        // Release enough line for the cast; the hanging length is only used
+        // while the rig is held at the rod tip.
         if (fishingLine != null)
-            fishingLine.ResetLineLength();
+            fishingLine.SetLineLength(castLineLength);
 
         float chargePercent = chargeTime > 0f ? chargeTimer / chargeTime : 0f;
         float force = Mathf.Lerp(minForce, maxForce, chargePercent);
