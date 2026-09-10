@@ -19,6 +19,7 @@ public class Sinker : MonoBehaviour
 
     public bool IsInWater { get; private set; }
     public bool IsOnBottom { get; private set; }
+    public bool IsBeingRetrieved { get; private set; }
     public Rigidbody Rigidbody => rb;
     public float MassKg => massKg;
     public float RigLength => rigLength;
@@ -78,6 +79,16 @@ public class Sinker : MonoBehaviour
             WaterDepth detectedWater = FindWaterAtPosition();
             if (detectedWater != null && transform.position.y <= detectedWater.SurfaceHeight + waterEntryTolerance)
                 EnterWater(detectedWater);
+        }
+
+        if (IsBeingRetrieved)
+        {
+            // Reeling is an explicit state: do not make the lead sink or lock
+            // again while the player is bringing it back to the rod.
+            rb.useGravity = false;
+            rb.isKinematic = false;
+            rb.linearDamping = waterDrag;
+            return;
         }
 
         if (IsOnBottom)
@@ -177,6 +188,7 @@ public class Sinker : MonoBehaviour
         currentWater = depth;
         IsInWater = true;
         IsOnBottom = false;
+        IsBeingRetrieved = false;
         targetBottomY = currentWater.GetBottomHeightAt(transform.position);
 
         rb.useGravity = false;
@@ -188,6 +200,7 @@ public class Sinker : MonoBehaviour
     private void SetOnBottom()
     {
         IsOnBottom = true;
+        IsBeingRetrieved = false;
 
         Vector3 p = transform.position;
         p.y = targetBottomY;
@@ -203,9 +216,24 @@ public class Sinker : MonoBehaviour
     public void AttachFish(Transform fish)
     {
         AttachedFish = fish;
+        IsBeingRetrieved = false;
         IsOnBottom = false;
         if (rb != null)
             rb.constraints = RigidbodyConstraints.None;
+    }
+
+    public void BeginRetrieval()
+    {
+        if (AttachedFish != null || !IsOnBottom || rb == null)
+            return;
+
+        IsOnBottom = false;
+        IsBeingRetrieved = true;
+        rb.constraints = RigidbodyConstraints.None;
+        rb.isKinematic = false;
+        rb.useGravity = false;
+        rb.linearVelocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
     }
 
     public void DetachFish()
