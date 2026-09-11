@@ -96,9 +96,24 @@ public class FishAI : MonoBehaviour
         if (sinker == null || !sinker.IsInWater) return;
         if (Vector3.Distance(transform.position, sinker.transform.position) > detectionRadius) return;
 
+        IgnoreCollisionWithSinker(sinker);
+
         baitTarget = sinker.transform;
         inspectTimer = 0f;
         ChangeState(FishState.InvestigatingBait);
+    }
+
+    private void IgnoreCollisionWithSinker(Sinker sinker)
+    {
+        // A carpa é kinemática enquanto nada livremente, e um corpo kinemático
+        // empurra fisicamente corpos normais com quem colida - o que fazia o
+        // chumbo ser empurrado em vez de "apanhado". A interação deve ser só
+        // lógica (este script + o FixedJoint no momento de fisgar).
+        Collider fishCollider = GetComponent<Collider>();
+        Collider sinkerCollider = sinker.GetComponent<Collider>();
+
+        if (fishCollider != null && sinkerCollider != null)
+            Physics.IgnoreCollision(fishCollider, sinkerCollider, true);
     }
 
     private void UpdateInvestigatingBait()

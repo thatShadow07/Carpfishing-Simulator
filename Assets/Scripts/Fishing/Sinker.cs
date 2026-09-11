@@ -176,6 +176,11 @@ public class Sinker : MonoBehaviour
         IsBeingRetrieved = true;
     }
 
+    public void EndRetrieval()
+    {
+        IsBeingRetrieved = false;
+    }
+
     public void AttachFish(Transform fish)
     {
         if (fish == null || AttachedFish != null)

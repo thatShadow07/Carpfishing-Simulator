@@ -42,10 +42,16 @@ public class FishingReel : MonoBehaviour
         if (distanceToOrigin >= minimumTravelBeforeFinish)
             sinkerHasLeftOrigin = true;
 
-        if (Keyboard.current.rKey.isPressed && fishingLine != null && !fishingLine.IsBroken)
+        bool isReeling = Keyboard.current.rKey.isPressed && fishingLine != null && !fishingLine.IsBroken;
+
+        if (isReeling)
         {
             sinker?.BeginRetrieval();
             fishingLine.ReelIn(recoverySpeed * Time.deltaTime);
+        }
+        else
+        {
+            sinker?.EndRetrieval();
         }
 
         if (sinkerHasLeftOrigin && distanceToOrigin <= catchDistance)

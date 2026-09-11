@@ -15,6 +15,7 @@ public class CastingSystem : MonoBehaviour
     [Header("Linha")]
     [SerializeField, Min(0.1f)] private float hangingLineLength = 0.75f;
     [SerializeField, Min(1f)] private float castLineLength = 35f;
+    [SerializeField, Min(0f)] private float landedLineSlack = 0.2f; // pequena folga extra depois de assentar
 
     [Header("Força")]
     [SerializeField] private float minForce = 5f;
@@ -24,6 +25,7 @@ public class CastingSystem : MonoBehaviour
     private CastState state = CastState.Idle;
     private float chargeTimer;
     private Rigidbody currentSinker;
+    private bool lineTrimmedAfterLanding;
 
     private void OnEnable()
     {
@@ -63,8 +65,26 @@ public class CastingSystem : MonoBehaviour
                 break;
 
             case CastState.InFlight:
+                TrimLineAfterLanding();
                 break;
         }
+    }
+
+    private void TrimLineAfterLanding()
+    {
+        if (lineTrimmedAfterLanding || fishingLine == null || currentSinker == null || castOrigin == null)
+            return;
+
+        Sinker sinker = currentSinker.GetComponent<Sinker>();
+        if (sinker == null || !sinker.IsOnBottom)
+            return;
+
+        // Assim que assenta, a linha "permitida" passa a bater certo com a
+        // distância real - sem isto, o carreto teria de desenrolar dezenas
+        // de metros de folga inútil antes de conseguir puxar seja o que for.
+        float distance = Vector3.Distance(castOrigin.position, currentSinker.position);
+        fishingLine.SetLineLength(distance + landedLineSlack);
+        lineTrimmedAfterLanding = true;
     }
 
     private void CreateHangingSinker()
@@ -73,8 +93,6 @@ public class CastingSystem : MonoBehaviour
             return;
 
         currentSinker = Instantiate(sinkerPrefab, castOrigin.position, castOrigin.rotation);
-        // The rig is always a free Rigidbody held by FishingLine. This lets it
-        // hang naturally from the rod before casting.
         currentSinker.isKinematic = false;
         currentSinker.linearVelocity = Vector3.zero;
         currentSinker.angularVelocity = Vector3.zero;
@@ -98,10 +116,10 @@ public class CastingSystem : MonoBehaviour
         if (currentSinker == null || playerCamera == null)
             return;
 
-        // Release enough line for the cast; the hanging length is only used
-        // while the rig is held at the rod tip.
         if (fishingLine != null)
             fishingLine.SetLineLength(castLineLength);
+
+        lineTrimmedAfterLanding = false;
 
         float chargePercent = chargeTime > 0f ? chargeTimer / chargeTime : 0f;
         float force = Mathf.Lerp(minForce, maxForce, chargePercent);
@@ -119,6 +137,7 @@ public class CastingSystem : MonoBehaviour
     {
         state = CastState.Idle;
         chargeTimer = 0f;
+        lineTrimmedAfterLanding = false;
 
         if (fishingLine != null)
             fishingLine.Clear();
