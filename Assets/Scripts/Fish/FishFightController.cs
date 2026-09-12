@@ -13,7 +13,6 @@ public class FishFightController : MonoBehaviour
     [SerializeField, Min(0.1f)] private float lineBreakingStrain = 6f;
     [SerializeField, Range(0f, 1f)] private float dragSetting = 0.45f;
     [SerializeField, Min(0.1f)] private float reelSpeed = 2f;
-    [SerializeField, Min(0.05f)] private float maximumReelRecoverySpeed = 0.75f;
     [SerializeField, Min(0.1f)] private float minimumLandingDistance = 2f;
     [SerializeField, Min(0.1f)] private float maximumFishDistance = 30f;
 
@@ -152,13 +151,8 @@ public class FishFightController : MonoBehaviour
         fishBody.linearVelocity = Vector3.zero;
         fishBody.angularVelocity = Vector3.zero;
 
-        // The main line always remains connected to the physical rig. The fish
-        // is connected to that rig by Sinker.AttachFish, preserving the chain
-        // instead of replacing the rig with the fish as the line target.
         hookedSinker.AttachFish(transform);
-        if (fishingLine.Target != hookedSinker.transform)
-            fishingLine.SetTarget(hookedSinker.transform);
-
+        fishingLine.SetTarget(transform);
         fishAI?.OnFightStarted();
         ChooseRunDirection(true);
 
@@ -253,7 +247,7 @@ public class FishFightController : MonoBehaviour
     private void UpdateLineAndTension()
     {
         if (isReeling)
-            fishingLine.ReelIn(Mathf.Min(reelSpeed, maximumReelRecoverySpeed) * Time.fixedDeltaTime);
+            fishingLine.ReelIn(reelSpeed * Time.fixedDeltaTime);
 
         lineTension = fishingLine.Tension;
     }

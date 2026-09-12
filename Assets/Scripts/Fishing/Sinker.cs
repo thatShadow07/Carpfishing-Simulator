@@ -1,7 +1,9 @@
 using UnityEngine;
 
-// Phase 1 physical rig root. The lead Rigidbody remains under physics at every
-// stage; the lake bed and a hooked fish are represented by breakable joints.
+// O chumbo é sempre um corpo físico normal. Assenta no fundo por gravidade e
+// atrito - não há nenhum joint a prendê-lo lá. Isto significa que nunca pode
+// haver mais do que um joint neste objeto (o do peixe, quando morde), o que
+// elimina o conflito de dois joints rígidos ao mesmo tempo.
 [RequireComponent(typeof(Rigidbody))]
 public class Sinker : MonoBehaviour
 {
@@ -13,10 +15,6 @@ public class Sinker : MonoBehaviour
     [SerializeField, Min(0f)] private float sinkAcceleration = 7f;
     [SerializeField, Min(0f)] private float waterDrag = 1.5f;
 
-    [Header("Lake Bed")]
-    [SerializeField, Min(0.1f)] private float bottomHoldingForce = 25f;
-    [SerializeField, Min(0.1f)] private float bottomHoldingTorque = 25f;
-
     [Header("Hook Connection")]
     [SerializeField, Min(0.1f)] private float hookConnectionStrength = 12f;
 
@@ -24,7 +22,7 @@ public class Sinker : MonoBehaviour
     [SerializeField, Min(0.01f)] private float rigLength = 0.35f;
 
     public bool IsInWater { get; private set; }
-    public bool IsOnBottom => bottomHoldJoint != null;
+    public bool IsOnBottom { get; private set; }
     public bool IsBeingRetrieved { get; private set; }
     public Rigidbody Rigidbody => rb;
     public float MassKg => massKg;
@@ -33,7 +31,6 @@ public class Sinker : MonoBehaviour
     public WaterDepth CurrentWater => currentWater;
 
     private WaterDepth currentWater;
-    private FixedJoint bottomHoldJoint;
     private FixedJoint fishConnectionJoint;
 
     private void Awake()
@@ -80,11 +77,15 @@ public class Sinker : MonoBehaviour
         rb.useGravity = false;
         rb.linearDamping = waterDrag;
 
-        // A bottom joint holds the lead against the lake bed. Reeling or a
-        // hookup destroys that joint; neither path writes to the Transform.
-        if (IsOnBottom || IsBeingRetrieved || AttachedFish != null)
+        // A ser recolhido ou ligado a um peixe: outra coisa está a controlar
+        // este corpo - não lutamos contra isso com a força de afundar.
+        if (IsBeingRetrieved || AttachedFish != null)
             return;
 
+        // Um empurrão constante para baixo simula o afundar. Assim que
+        // encosta ao fundo, a colisão + atrito normais mantêm-no lá -
+        // sem joint nenhum, por isso nunca há um segundo joint a competir
+        // com o do peixe.
         rb.AddForce(Vector3.down * sinkAcceleration, ForceMode.Acceleration);
     }
 
@@ -137,7 +138,7 @@ public class Sinker : MonoBehaviour
             return;
 
         if (collision.contactCount > 0 && collision.GetContact(0).normal.y > 0.2f)
-            HoldOnLakeBed();
+            IsOnBottom = true;
     }
 
     private void EnterWater(WaterDepth depth)
@@ -147,24 +148,10 @@ public class Sinker : MonoBehaviour
 
         currentWater = depth;
         IsInWater = true;
+        IsOnBottom = false;
         IsBeingRetrieved = false;
         rb.useGravity = false;
         rb.linearDamping = waterDrag;
-    }
-
-    private void HoldOnLakeBed()
-    {
-        if (IsOnBottom)
-            return;
-
-        bottomHoldJoint = gameObject.AddComponent<FixedJoint>();
-        bottomHoldJoint.connectedBody = null;
-        bottomHoldJoint.breakForce = bottomHoldingForce;
-        bottomHoldJoint.breakTorque = bottomHoldingTorque;
-        bottomHoldJoint.enableCollision = false;
-
-        rb.linearVelocity = Vector3.zero;
-        rb.angularVelocity = Vector3.zero;
     }
 
     public void BeginRetrieval()
@@ -172,7 +159,7 @@ public class Sinker : MonoBehaviour
         if (AttachedFish != null || rb == null)
             return;
 
-        ReleaseLakeBedHold();
+        IsOnBottom = false;
         IsBeingRetrieved = true;
     }
 
@@ -193,7 +180,7 @@ public class Sinker : MonoBehaviour
             return;
         }
 
-        ReleaseLakeBedHold();
+        IsOnBottom = false;
         IsBeingRetrieved = false;
         AttachedFish = fish;
 
@@ -211,14 +198,6 @@ public class Sinker : MonoBehaviour
 
         fishConnectionJoint = null;
         AttachedFish = null;
-    }
-
-    private void ReleaseLakeBedHold()
-    {
-        if (bottomHoldJoint != null)
-            Destroy(bottomHoldJoint);
-
-        bottomHoldJoint = null;
     }
 
     public Transform GetAttachedFish() => AttachedFish;
