@@ -19,11 +19,12 @@ public class FishingLine : MonoBehaviour
     [SerializeField, Min(0.01f)] private float tensionSmoothing = 12f;
 
     [Header("Reel Drag (carreto)")]
-    [SerializeField, Min(0f)] private float dragThreshold = 4f;      // tensão a partir da qual o carreto "desliza"
-    [SerializeField, Min(0f)] private float dragPayOutSpeed = 1.2f;  // m/s de linha libertada acima do drag
+    [SerializeField, Min(0f)] private float dragThreshold = 4f;
+    [SerializeField, Min(0f)] private float dragPayOutSpeed = 1.2f;
 
     private LineRenderer lineRenderer;
     private Transform target;
+    private Transform visualAttachPoint; // onde a linha "agarra" visualmente - pode ser diferente do target físico
     private Transform jointAnchor;
     private Rigidbody jointAnchorBody;
     private ConfigurableJoint physicalJoint;
@@ -67,10 +68,6 @@ public class FishingLine : MonoBehaviour
         float targetTension = extension * effectiveSpring + Mathf.Max(0f, radialSpeed) * 0.1f;
         previousDistance = distance;
 
-        // O carreto "desliza" (como um drag real) sempre que a tensão exceder
-        // o limite configurado - liberta linha para aliviar, em vez de deixar
-        // a tensão subir a direito até partir. Isto é o que falta a um
-        // elástico simples: um travão de fricção, não um limite rígido.
         if (targetTension > dragThreshold)
         {
             physicalLineLength += dragPayOutSpeed * Time.fixedDeltaTime;
@@ -98,6 +95,7 @@ public class FishingLine : MonoBehaviour
 
         target = newTarget;
         targetBody = null;
+        visualAttachPoint = null;
         previousDistance = target != null && lineStart != null
             ? Vector3.Distance(lineStart.position, target.position)
             : 0f;
@@ -121,6 +119,13 @@ public class FishingLine : MonoBehaviour
         }
 
         targetBody = newTargetBody;
+
+        // Se o alvo for um Sinker com um ponto de ligação próprio (a argolinha
+        // do modelo), a linha agarra-se aí visualmente. A física continua a
+        // usar o corpo todo, isto é só sobre onde o desenho da linha aponta.
+        Sinker sinker = target.GetComponent<Sinker>();
+        visualAttachPoint = sinker != null ? sinker.LineAttachPoint : target;
+
         CreatePhysicalJoint(newTargetBody);
         lineRenderer.enabled = true;
     }
@@ -146,6 +151,7 @@ public class FishingLine : MonoBehaviour
         ClearPhysicalJoint();
         target = null;
         targetBody = null;
+        visualAttachPoint = null;
         tension = 0f;
         IsBroken = false;
         lineRenderer.enabled = false;
@@ -239,9 +245,11 @@ public class FishingLine : MonoBehaviour
             return;
         }
 
+        Transform endPoint = visualAttachPoint != null ? visualAttachPoint : target;
+
         lineRenderer.enabled = true;
         lineRenderer.SetPosition(0, lineStart.position);
-        lineRenderer.SetPosition(1, target.position);
+        lineRenderer.SetPosition(1, endPoint.position);
     }
 
     private void OnDestroy()

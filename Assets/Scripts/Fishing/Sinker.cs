@@ -21,6 +21,9 @@ public class Sinker : MonoBehaviour
     [SerializeField, Min(0.01f)] private float rigLength = 0.35f;
     [SerializeField, Min(0.1f)] private float hookFollowSpeed = 2.5f; // m/s máximo de correção
 
+    [Header("Visual")]
+    [SerializeField] private Transform lineAttachPoint; // opcional - a argolinha de metal do modelo
+
     public bool IsInWater { get; private set; }
     public bool IsOnBottom { get; private set; }
     public bool IsBeingRetrieved { get; private set; }
@@ -29,6 +32,7 @@ public class Sinker : MonoBehaviour
     public float RigLength => rigLength;
     public Transform AttachedFish { get; private set; }
     public WaterDepth CurrentWater => currentWater;
+    public Transform LineAttachPoint => lineAttachPoint != null ? lineAttachPoint : transform;
 
     private WaterDepth currentWater;
 
@@ -42,6 +46,7 @@ public class Sinker : MonoBehaviour
         rb.isKinematic = false;
         rb.linearDamping = 0f;
         rb.angularDamping = 0.05f;
+        rb.constraints = RigidbodyConstraints.FreezeRotation; // nunca vira "de pernas para o ar
     }
 
     private void OnEnable() => Current = this;
@@ -90,8 +95,6 @@ public class Sinker : MonoBehaviour
 
     private void FollowAttachedFish()
     {
-        // Sem gravidade artificial nem joints - só uma correção de posição
-        // suave, capada por hookFollowSpeed. Nunca pode "disparar".
         rb.useGravity = false;
         rb.linearDamping = waterDrag;
 
