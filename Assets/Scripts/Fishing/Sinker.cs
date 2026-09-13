@@ -1,9 +1,11 @@
 using UnityEngine;
 
 // O chumbo é sempre um corpo físico normal. Assenta no fundo por gravidade e
-// atrito - não há nenhum joint a prendê-lo lá. Isto significa que nunca pode
-// haver mais do que um joint neste objeto (o do peixe, quando morde), o que
-// elimina o conflito de dois joints rígidos ao mesmo tempo.
+// atrito - não há nenhum joint a prendê-lo lá. A ligação ao peixe TAMBÉM não
+// usa nenhum joint do Unity (SpringJoint/FixedJoint) - um chumbo de ~90g é
+// leve demais para qualquer mola do PhysX não o disparar ao mínimo esticão.
+// Em vez disso, corrigimos a posição à mão, com uma velocidade máxima -
+// impossível de "explodir" porque não há força nenhuma envolvida.
 [RequireComponent(typeof(Rigidbody))]
 public class Sinker : MonoBehaviour
 {
@@ -16,10 +18,8 @@ public class Sinker : MonoBehaviour
     [SerializeField, Min(0f)] private float waterDrag = 1.5f;
 
     [Header("Hook Connection")]
-    [SerializeField, Min(0.1f)] private float hookConnectionStrength = 12f;
-
-    [Header("Rig")]
     [SerializeField, Min(0.01f)] private float rigLength = 0.35f;
+    [SerializeField, Min(0.1f)] private float hookFollowSpeed = 2.5f; // m/s máximo de correção
 
     public bool IsInWater { get; private set; }
     public bool IsOnBottom { get; private set; }
@@ -31,7 +31,6 @@ public class Sinker : MonoBehaviour
     public WaterDepth CurrentWater => currentWater;
 
     private WaterDepth currentWater;
-    private FixedJoint fishConnectionJoint;
 
     private void Awake()
     {
@@ -64,6 +63,12 @@ public class Sinker : MonoBehaviour
         if (rb == null)
             return;
 
+        if (AttachedFish != null)
+        {
+            FollowAttachedFish();
+            return;
+        }
+
         if (!IsInWater)
         {
             WaterDepth detectedWater = FindWaterAtPosition();
@@ -77,16 +82,29 @@ public class Sinker : MonoBehaviour
         rb.useGravity = false;
         rb.linearDamping = waterDrag;
 
-        // A ser recolhido ou ligado a um peixe: outra coisa está a controlar
-        // este corpo - não lutamos contra isso com a força de afundar.
-        if (IsBeingRetrieved || AttachedFish != null)
+        if (IsBeingRetrieved)
             return;
 
-        // Um empurrão constante para baixo simula o afundar. Assim que
-        // encosta ao fundo, a colisão + atrito normais mantêm-no lá -
-        // sem joint nenhum, por isso nunca há um segundo joint a competir
-        // com o do peixe.
         rb.AddForce(Vector3.down * sinkAcceleration, ForceMode.Acceleration);
+    }
+
+    private void FollowAttachedFish()
+    {
+        // Sem gravidade artificial nem joints - só uma correção de posição
+        // suave, capada por hookFollowSpeed. Nunca pode "disparar".
+        rb.useGravity = false;
+        rb.linearDamping = waterDrag;
+
+        Vector3 toSinker = rb.position - AttachedFish.position;
+        float distance = toSinker.magnitude;
+
+        if (distance > rigLength)
+        {
+            Vector3 desiredPosition = AttachedFish.position + toSinker.normalized * rigLength;
+            rb.position = Vector3.MoveTowards(rb.position, desiredPosition, hookFollowSpeed * Time.fixedDeltaTime);
+        }
+
+        rb.linearVelocity = Vector3.zero;
     }
 
     private WaterDepth FindWaterAtPosition()
@@ -183,20 +201,12 @@ public class Sinker : MonoBehaviour
         IsOnBottom = false;
         IsBeingRetrieved = false;
         AttachedFish = fish;
-
-        fishConnectionJoint = gameObject.AddComponent<FixedJoint>();
-        fishConnectionJoint.connectedBody = fishBody;
-        fishConnectionJoint.breakForce = hookConnectionStrength;
-        fishConnectionJoint.breakTorque = hookConnectionStrength;
-        fishConnectionJoint.enableCollision = false;
+        rb.linearVelocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
     }
 
     public void DetachFish()
     {
-        if (fishConnectionJoint != null)
-            Destroy(fishConnectionJoint);
-
-        fishConnectionJoint = null;
         AttachedFish = null;
     }
 

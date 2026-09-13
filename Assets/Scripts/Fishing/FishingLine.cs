@@ -18,6 +18,10 @@ public class FishingLine : MonoBehaviour
     [SerializeField, Min(0.01f)] private float minimumLineLength = 0.25f;
     [SerializeField, Min(0.01f)] private float tensionSmoothing = 12f;
 
+    [Header("Reel Drag (carreto)")]
+    [SerializeField, Min(0f)] private float dragThreshold = 4f;      // tensão a partir da qual o carreto "desliza"
+    [SerializeField, Min(0f)] private float dragPayOutSpeed = 1.2f;  // m/s de linha libertada acima do drag
+
     private LineRenderer lineRenderer;
     private Transform target;
     private Transform jointAnchor;
@@ -56,8 +60,6 @@ public class FishingLine : MonoBehaviour
 
         float distance = Vector3.Distance(lineStart.position, target.position);
         float extension = Mathf.Max(0f, distance - (physicalLineLength + lineSlack));
-        // Measure the line's own extension speed, not world-space target speed.
-        // Walking with the rod must not create artificial tension.
         float radialSpeed = Time.fixedDeltaTime > 0f
             ? (distance - previousDistance) / Time.fixedDeltaTime
             : 0f;
@@ -65,9 +67,18 @@ public class FishingLine : MonoBehaviour
         float targetTension = extension * effectiveSpring + Mathf.Max(0f, radialSpeed) * 0.1f;
         previousDistance = distance;
 
-        // The joint defines the allowed line length; this force is the load
-        // transmitted by a taut line. It also makes reel recovery reliable
-        // across Rigidbody and ConfigurableJoint settings.
+        // O carreto "desliza" (como um drag real) sempre que a tensão exceder
+        // o limite configurado - liberta linha para aliviar, em vez de deixar
+        // a tensão subir a direito até partir. Isto é o que falta a um
+        // elástico simples: um travão de fricção, não um limite rígido.
+        if (targetTension > dragThreshold)
+        {
+            physicalLineLength += dragPayOutSpeed * Time.fixedDeltaTime;
+            extension = Mathf.Max(0f, distance - (physicalLineLength + lineSlack));
+            targetTension = extension * effectiveSpring + Mathf.Max(0f, radialSpeed) * 0.1f;
+            UpdateJointLimit();
+        }
+
         if (targetBody != null && !targetBody.isKinematic && targetTension > 0f)
         {
             Vector3 towardRod = lineStart.position - target.position;
@@ -86,7 +97,7 @@ public class FishingLine : MonoBehaviour
         ClearPhysicalJoint();
 
         target = newTarget;
-        this.targetBody = null;
+        targetBody = null;
         previousDistance = target != null && lineStart != null
             ? Vector3.Distance(lineStart.position, target.position)
             : 0f;
@@ -100,8 +111,8 @@ public class FishingLine : MonoBehaviour
             return;
         }
 
-        Rigidbody targetBody = target.GetComponent<Rigidbody>();
-        if (targetBody == null)
+        Rigidbody newTargetBody = target.GetComponent<Rigidbody>();
+        if (newTargetBody == null)
         {
             Debug.LogError("FishingLine: o alvo precisa de um Rigidbody.", target);
             target = null;
@@ -109,8 +120,8 @@ public class FishingLine : MonoBehaviour
             return;
         }
 
-        this.targetBody = targetBody;
-        CreatePhysicalJoint(targetBody);
+        targetBody = newTargetBody;
+        CreatePhysicalJoint(newTargetBody);
         lineRenderer.enabled = true;
     }
 
@@ -148,7 +159,11 @@ public class FishingLine : MonoBehaviour
     public void SetLineLength(float newLength)
     {
         physicalLineLength = Mathf.Max(minimumLineLength, newLength);
+        UpdateJointLimit();
+    }
 
+    private void UpdateJointLimit()
+    {
         if (physicalJoint == null)
             return;
 
@@ -168,9 +183,9 @@ public class FishingLine : MonoBehaviour
         jointAnchorBody.useGravity = false;
     }
 
-    private void CreatePhysicalJoint(Rigidbody targetBody)
+    private void CreatePhysicalJoint(Rigidbody body)
     {
-        physicalJoint = targetBody.gameObject.AddComponent<ConfigurableJoint>();
+        physicalJoint = body.gameObject.AddComponent<ConfigurableJoint>();
         physicalJoint.connectedBody = jointAnchorBody;
         physicalJoint.autoConfigureConnectedAnchor = false;
         physicalJoint.anchor = Vector3.zero;
@@ -185,9 +200,6 @@ public class FishingLine : MonoBehaviour
         physicalJoint.linearLimit = limit;
 
         SoftJointLimitSpring spring = physicalJoint.linearLimitSpring;
-        // Existing Unity scenes may have serialized the old zero spring value.
-        // Keep a minimum so the rig is physically supported even before the
-        // Inspector is re-saved.
         spring.spring = Mathf.Max(20f, jointSpring);
         spring.damper = Mathf.Max(1f, jointDamper);
         physicalJoint.linearLimitSpring = spring;
